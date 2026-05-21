@@ -221,10 +221,10 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
   const dark = theme === "dark";
   const sphere = dark ? "#0F1015" : "#FFFFFF";
   const landColor = dark ? "#3D4049" : "#C7C9CF";
-  const hotColor = "#4A9EFF";
+  const hotColor = "#FF6A00";
   const activeColor = "#FF6A00";
-  const popularArc = dark ? "rgba(180,200,230,0.35)" : "rgba(74,158,255,0.45)";
-  const atmosphere = "#4A9EFF";
+  const popularArc = dark ? "rgba(255,170,90,0.40)" : "rgba(255,106,0,0.45)";
+  const atmosphere = "#FF6A00";
 
   // Combined point cloud: land dots (tiny, dim) + hot destinations (bright halo).
   const allPoints: (LandPoint | HotPoint)[] = useMemo(
@@ -299,7 +299,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
         backgroundColor="rgba(0,0,0,0)"
         showAtmosphere
         atmosphereColor={atmosphere}
-        atmosphereAltitude={0.14}
+        atmosphereAltitude={0.18}
         globeImageUrl={null}
         showGlobe
         // No polygons — continents are drawn as dot matrix below.
