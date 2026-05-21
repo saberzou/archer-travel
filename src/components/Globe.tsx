@@ -322,12 +322,45 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
         }
         arcStroke={(d: object) => ((d as ArcDatum).active ? 1.0 : 0.45)}
         arcAltitude={(d: object) => ((d as ArcDatum).active ? 0.34 : 0.2)}
-        arcDashLength={(d: object) => ((d as ArcDatum).active ? 0.35 : 1)}
-        arcDashGap={(d: object) => ((d as ArcDatum).active ? 0.65 : 0)}
+        // Popular routes: gentle marching pulse (long dash + tiny gap so they
+        // still read as continuous, but feel alive). Active: classic chase.
+        arcDashLength={(d: object) => ((d as ArcDatum).active ? 0.35 : 0.9)}
+        arcDashGap={(d: object) => ((d as ArcDatum).active ? 0.65 : 0.1)}
         arcDashAnimateTime={(d: object) =>
-          (d as ArcDatum).active ? 2200 : 0
+          (d as ArcDatum).active ? 2200 : 6000
         }
-        arcDashInitialGap={() => Math.random()}
+        arcDashInitialGap={(d: object) =>
+          (d as ArcDatum).active ? 0 : Math.random()
+        }
+        arcsTransitionDuration={0}
+        pointsMerge={false}
+        onPointHover={(p: object | null) => {
+          document.body.style.cursor =
+            p && (p as { kind?: string }).kind === "hot" ? "pointer" : "auto";
+        }}
+        pointLabel={(d: object) => {
+          const p = d as { kind?: string; iata?: string; city?: string };
+          if (p.kind !== "hot") return "";
+          return `<div style="
+              font-family: var(--font-plex-mono), ui-monospace, monospace;
+              background:${dark ? "#16171B" : "#FFFFFF"};
+              color:${dark ? "#F5F5F7" : "#0A0A0A"};
+              border:1px solid ${dark ? "#26272C" : "#E5E5EA"};
+              padding:6px 10px; border-radius:8px;
+              box-shadow:0 4px 14px rgba(0,0,0,${dark ? "0.45" : "0.12"});
+              white-space:nowrap;
+              transform: translateY(-6px);
+            ">
+              <div style="font-size:13px; letter-spacing:0.06em; font-weight:600;">
+                ${p.iata ?? ""}
+              </div>
+              <div style="
+                font-family: var(--font-inter), system-ui, sans-serif;
+                font-size:11px; opacity:0.7; margin-top:2px; letter-spacing:0.01em;">
+                ${p.city ?? ""}
+              </div>
+            </div>`;
+        }}
         labelsData={labelsData}
         labelLat={(d: object) => (d as { lat: number }).lat}
         labelLng={(d: object) => (d as { lng: number }).lng}
