@@ -99,6 +99,16 @@ export default function Chat() {
     if (!input.trim() || status !== "ready") return;
     sendMessage({ text: input });
     setInput("");
+    // Tell the globe to stop idling and frame the active route.
+    // Real routes will come from tool output; for now we cue the demo.
+    window.dispatchEvent(
+      new CustomEvent("archer:focus", {
+        detail: {
+          from: { iata: "PEK", lat: 40.0801, lng: 116.5846 },
+          to: { iata: "BKK", lat: 13.6811, lng: 100.7475 },
+        },
+      })
+    );
   };
 
   return (

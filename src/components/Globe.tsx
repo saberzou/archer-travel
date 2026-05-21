@@ -88,7 +88,7 @@ export default function Globe({
     };
   }, []);
 
-  // Auto-rotate + initial POV.
+  // Auto-rotate by default; snap to route midpoint on `archer:focus` event.
   useEffect(() => {
     const g = globeRef.current as
       | {
@@ -97,22 +97,41 @@ export default function Globe({
             autoRotateSpeed: number;
             enableZoom: boolean;
           };
-          pointOfView?: (pov: {
-            lat: number;
-            lng: number;
-            altitude: number;
-          }) => void;
+          pointOfView?: (
+            pov: { lat: number; lng: number; altitude: number },
+            ms?: number
+          ) => void;
         }
       | null;
     if (!g) return;
     const controls = g.controls?.();
     if (controls) {
       controls.autoRotate = true;
-      // ~0.3 rad/s mapped to react-globe.gl's auto-rotate scalar.
       controls.autoRotateSpeed = 0.35;
       controls.enableZoom = false;
     }
     g.pointOfView?.({ lat: 20, lng: 0, altitude: 2.4 });
+
+    const onFocus = (e: Event) => {
+      const detail = (e as CustomEvent<{ from?: Airport; to?: Airport }>)
+        .detail;
+      const c = g.controls?.();
+      if (c) c.autoRotate = false;
+      const from = detail?.from;
+      const to = detail?.to;
+      if (from && to) {
+        // Midpoint on great-circle approximation (good enough for framing).
+        const lat = (from.lat + to.lat) / 2;
+        let dLng = to.lng - from.lng;
+        if (dLng > 180) dLng -= 360;
+        if (dLng < -180) dLng += 360;
+        const lng = from.lng + dLng / 2;
+        g.pointOfView?.({ lat, lng, altitude: 2.0 }, 1400);
+      }
+    };
+    window.addEventListener("archer:focus", onFocus as EventListener);
+    return () =>
+      window.removeEventListener("archer:focus", onFocus as EventListener);
   }, [features]);
 
   const dark = theme === "dark";
@@ -189,17 +208,29 @@ export default function Globe({
         pathTransitionDuration={0}
         arcsData={arcsData}
         arcColor={() => atmosphere}
-        arcStroke={0.25}
-        arcAltitude={0.25}
-        arcDashLength={0.18}
-        arcDashGap={0.12}
-        arcDashAnimateTime={1200}
+        arcStroke={0.5}
+        arcAltitude={0.28}
+        arcDashLength={0.35}
+        arcDashGap={0.65}
+        arcDashAnimateTime={2200}
+        arcDashInitialGap={() => Math.random()}
         pointsData={pointsData}
         pointLat={(d: object) => (d as { lat: number }).lat}
         pointLng={(d: object) => (d as { lng: number }).lng}
         pointAltitude={0.005}
         pointRadius={0.35}
         pointColor={() => atmosphere}
+        labelsData={pointsData}
+        labelLat={(d: object) => (d as { lat: number }).lat}
+        labelLng={(d: object) => (d as { lng: number }).lng}
+        labelText={(d: object) => (d as { iata: string }).iata}
+        labelSize={0.55}
+        labelDotRadius={0}
+        labelAltitude={0.02}
+        labelColor={() => (dark ? "#F5F5F7" : "#0A0A0A")}
+        labelResolution={2}
+        labelIncludeDot={false}
+        labelTypeFace={undefined}
         pointLabel={(d: object) =>
           `<div style="
             font-family: var(--font-plex-mono), ui-monospace, monospace;
