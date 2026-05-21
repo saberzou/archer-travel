@@ -6,6 +6,7 @@ import { useMemo, useRef, useState, useEffect, Fragment } from "react";
 import { ArrowUp } from "lucide-react";
 import Archer, { type ArcherState } from "./Archer";
 import { lookupAirport } from "@/lib/airports";
+import FlightResultCard, { parseFlightOutput } from "./FlightResultCard";
 
 /* ------------------------------------------------------------------ */
 /*  Tool helpers (preserved from prior scaffold)                       */
@@ -219,6 +220,7 @@ export default function Chat() {
                 className={`flex flex-col gap-1 ${
                   isUser ? "items-end" : "items-start"
                 } max-w-[560px] w-fit min-w-0`}
+                style={!isUser ? { width: "min(560px, 75vw)" } : undefined}
               >
                 {m.parts.map((part, i) => {
                   if (part.type === "text") {
@@ -248,6 +250,25 @@ export default function Chat() {
                   ) {
                     const tp = part as unknown as ToolUIPart;
                     const name = getToolName(tp) ?? "tool";
+
+                    // When a flight_search call completes, render the result
+                    // as a stack of boarding-pass cards instead of plain text.
+                    if (
+                      tp.state === "output-available" &&
+                      name.startsWith("flight_search")
+                    ) {
+                      const flights = parseFlightOutput(tp.output);
+                      if (flights.length === 0) return null;
+                      const top = flights.slice(0, 5);
+                      return (
+                        <div key={i} className="flex flex-col gap-2 w-full">
+                          {top.map((f, fi) => (
+                            <FlightResultCard key={`${f.id}-${fi}`} flight={f} />
+                          ))}
+                        </div>
+                      );
+                    }
+
                     if (tp.state === "output-available") return null;
                     return (
                       <div
