@@ -204,7 +204,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
       controls.autoRotateSpeed = 0.3;
       controls.enableZoom = false;
     }
-    g.pointOfView?.({ lat: 20, lng: 0, altitude: 2.4 });
+    g.pointOfView?.({ lat: 20, lng: 0, altitude: 1.9 });
 
     if (!activeRoute) return;
     const c = g.controls?.();
@@ -215,7 +215,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
     if (dLng > 180) dLng -= 360;
     if (dLng < -180) dLng += 360;
     const lng = from.lng + dLng / 2;
-    g.pointOfView?.({ lat, lng, altitude: 2.0 }, 1400);
+    g.pointOfView?.({ lat, lng, altitude: 1.6 }, 1400);
   }, [activeRoute, landDots]);
 
   const dark = theme === "dark";
@@ -223,7 +223,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
   const landColor = dark ? "#3D4049" : "#C7C9CF";
   const hotColor = "#4A9EFF";
   const activeColor = "#FF6A00";
-  const popularArc = dark ? "rgba(255,255,255,0.10)" : "rgba(74,158,255,0.18)";
+  const popularArc = dark ? "rgba(180,200,230,0.35)" : "rgba(74,158,255,0.45)";
   const atmosphere = "#4A9EFF";
 
   // Combined point cloud: land dots (tiny, dim) + hot destinations (bright halo).
@@ -320,8 +320,8 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
         arcColor={(d: object) =>
           (d as ArcDatum).active ? activeColor : popularArc
         }
-        arcStroke={(d: object) => ((d as ArcDatum).active ? 0.6 : 0.25)}
-        arcAltitude={(d: object) => ((d as ArcDatum).active ? 0.32 : 0.18)}
+        arcStroke={(d: object) => ((d as ArcDatum).active ? 1.0 : 0.45)}
+        arcAltitude={(d: object) => ((d as ArcDatum).active ? 0.34 : 0.2)}
         arcDashLength={(d: object) => ((d as ArcDatum).active ? 0.35 : 1)}
         arcDashGap={(d: object) => ((d as ArcDatum).active ? 0.65 : 0)}
         arcDashAnimateTime={(d: object) =>
