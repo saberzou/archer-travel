@@ -1,10 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: [
-    "@modelcontextprotocol/sdk",
-    "@ai-sdk/mcp",
-  ],
+  serverExternalPackages: ["@ai-sdk/mcp"],
 };
 
 export default nextConfig;
