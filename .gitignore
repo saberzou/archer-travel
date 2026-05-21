@@ -8,3 +8,4 @@ search_*.json
 tools.json
 travelkit-skill/
 .DS_Store
+tsconfig.tsbuildinfo
