@@ -1,10 +1,35 @@
 import type { Metadata } from "next";
+import { Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-plex-mono",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Archer · Travel",
-  description: "Conversational AI flight booking — TravelKit MCP + Gemini",
+  title: "Archer · travel that flies",
+  description: "Conversational flight booking, designed quietly.",
+  icons: { icon: "/archer/favicon.png" },
 };
+
+// Inlined pre-hydration theme setter — avoids FOUC on dark-mode users.
+const themeInitScript = `
+(function(){try{
+  var s = localStorage.getItem('archer-theme');
+  var m = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var t = s ? s : (m ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', t);
+}catch(e){}})();
+`;
 
 export default function RootLayout({
   children,
@@ -12,10 +37,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-black text-white antialiased min-h-screen">
-        {children}
-      </body>
+    <html lang="en" className={`${inter.variable} ${plexMono.variable}`}>
+      <head>
+        <meta charSet="utf-8" />
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
+      <body className="bg-bg text-text-primary min-h-screen">{children}</body>
     </html>
   );
 }

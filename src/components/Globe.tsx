@@ -1,23 +1,84 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const ReactGlobe = dynamic(() => import("react-globe.gl"), { ssr: false });
 
-export type Arc = {
-  startLat: number;
-  startLng: number;
-  endLat: number;
-  endLng: number;
-  color: string;
+export type Airport = {
+  iata: string;
+  lat: number;
+  lng: number;
+  label?: string;
 };
 
-export default function Globe({ arcs = [] }: { arcs?: Arc[] }) {
-  // ref typed loosely — react-globe.gl exposes a heavily-typed imperative API
-  // that's not worth wrestling with here.
-  const globeRef = useRef<unknown>(null);
+export type Route = {
+  from: Airport;
+  to: Airport;
+};
 
+type ThemeMode = "light" | "dark";
+
+const NATURAL_EARTH_110M =
+  "https://unpkg.com/three-globe/example/country-polygons/ne_110m_admin_0_countries.geojson";
+
+export default function Globe({
+  routes = [],
+  airports = [],
+}: {
+  routes?: Route[];
+  airports?: Airport[];
+}) {
+  const globeRef = useRef<unknown>(null);
+  const [features, setFeatures] = useState<object[]>([]);
+  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [size, setSize] = useState({ w: 800, h: 800 });
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  // Track theme switches (so colors update live).
+  useEffect(() => {
+    const read = () =>
+      setTheme(
+        (document.documentElement.getAttribute("data-theme") as ThemeMode) ??
+          "light"
+      );
+    read();
+    const obs = new MutationObserver(read);
+    obs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => obs.disconnect();
+  }, []);
+
+  // Container size (react-globe.gl wants explicit width/height).
+  useEffect(() => {
+    if (!wrapRef.current) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setSize({ w: Math.max(320, width), h: Math.max(320, height) });
+    });
+    ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Fetch Natural Earth 110m geojson once.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(NATURAL_EARTH_110M)
+      .then((r) => r.json())
+      .then((gj: { features?: object[] }) => {
+        if (!cancelled) setFeatures(gj.features ?? []);
+      })
+      .catch(() => {
+        /* offline / blocked — globe still renders */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Auto-rotate + initial POV.
   useEffect(() => {
     const g = globeRef.current as
       | {
@@ -26,35 +87,124 @@ export default function Globe({ arcs = [] }: { arcs?: Arc[] }) {
             autoRotateSpeed: number;
             enableZoom: boolean;
           };
-          pointOfView?: (pov: { lat: number; lng: number; altitude: number }) => void;
+          pointOfView?: (pov: {
+            lat: number;
+            lng: number;
+            altitude: number;
+          }) => void;
         }
       | null;
     if (!g) return;
     const controls = g.controls?.();
     if (controls) {
       controls.autoRotate = true;
+      // ~0.3 rad/s mapped to react-globe.gl's auto-rotate scalar.
       controls.autoRotateSpeed = 0.35;
       controls.enableZoom = false;
     }
-    g.pointOfView?.({ lat: 20, lng: 30, altitude: 2.2 });
-  }, []);
+    g.pointOfView?.({ lat: 20, lng: 0, altitude: 2.4 });
+  }, [features]);
+
+  const dark = theme === "dark";
+  const sphere = dark ? "#0B0B0F" : "#FFFFFF";
+  const land = dark ? "#1E1F24" : "#E8E8EC";
+  const atmosphere = "#4A9EFF";
+  const pinRing = dark ? "#000000" : "#FFFFFF";
+
+  type ArcD = {
+    startLat: number;
+    startLng: number;
+    endLat: number;
+    endLng: number;
+  };
+  const arcsData: ArcD[] = routes.map((r) => ({
+    startLat: r.from.lat,
+    startLng: r.from.lng,
+    endLat: r.to.lat,
+    endLng: r.to.lng,
+  }));
+
+  const pointsData = airports.map((a) => ({
+    lat: a.lat,
+    lng: a.lng,
+    iata: a.iata,
+  }));
 
   return (
-    <div className="fixed inset-0 -z-10 bg-black">
+    <div ref={wrapRef} className="absolute inset-0">
       <ReactGlobe
         ref={globeRef as never}
-        globeImageUrl="https://unpkg.com/three-globe/example/img/earth-night.jpg"
-        bumpImageUrl="https://unpkg.com/three-globe/example/img/earth-topology.png"
+        width={size.w}
+        height={size.h}
         backgroundColor="rgba(0,0,0,0)"
-        atmosphereColor="#7dd3fc"
-        atmosphereAltitude={0.18}
-        arcsData={arcs}
-        arcColor={(d: object) => (d as Arc).color}
-        arcStroke={0.5}
-        arcDashLength={0.4}
-        arcDashGap={0.2}
-        arcDashAnimateTime={2000}
+        showAtmosphere
+        atmosphereColor={atmosphere}
+        atmosphereAltitude={0.12}
+        globeImageUrl={null}
+        showGlobe
+        polygonsData={features}
+        polygonAltitude={0.005}
+        polygonCapColor={() => land}
+        polygonSideColor={() => "rgba(0,0,0,0)"}
+        polygonStrokeColor={() => "rgba(0,0,0,0)"}
+        arcsData={arcsData}
+        arcColor={() => atmosphere}
+        arcStroke={0.25}
+        arcAltitude={0.25}
+        arcDashLength={0.18}
+        arcDashGap={0.12}
+        arcDashAnimateTime={1200}
+        pointsData={pointsData}
+        pointLat={(d: object) => (d as { lat: number }).lat}
+        pointLng={(d: object) => (d as { lng: number }).lng}
+        pointAltitude={0.005}
+        pointRadius={0.35}
+        pointColor={() => atmosphere}
+        pointLabel={(d: object) =>
+          `<div style="
+            font-family: var(--font-plex-mono), ui-monospace, monospace;
+            font-size:12px; letter-spacing:0.04em; text-transform:uppercase;
+            color:${dark ? "#F5F5F7" : "#0A0A0A"};
+            background:${dark ? "#16171B" : "#FFFFFF"};
+            border:1px solid ${dark ? "#26272C" : "#E5E5EA"};
+            padding:4px 8px; border-radius:6px;">
+            ${(d as { iata: string }).iata}
+          </div>`
+        }
+        onGlobeReady={() => {
+          // Apply solid sphere color post-mount by tweaking the globe material.
+          // react-globe.gl exposes the underlying THREE objects via .scene().
+          const g = globeRef.current as {
+            scene?: () => {
+              traverse: (cb: (o: unknown) => void) => void;
+            };
+          } | null;
+          if (!g?.scene) return;
+          g.scene().traverse((obj: unknown) => {
+            const o = obj as {
+              isMesh?: boolean;
+              geometry?: { type?: string };
+              material?: { color?: { set: (c: string) => void } };
+            };
+            if (
+              o.isMesh &&
+              o.geometry?.type === "SphereGeometry" &&
+              o.material?.color
+            ) {
+              o.material.color.set(sphere);
+            }
+          });
+        }}
       />
+      {/* Pin inner-ring fake (CSS dots can't sit on globe; the ring is faked
+          via react-globe.gl's points + a thin atmosphere already provides
+          enough separation against the pale continents). */}
+      <style jsx>{`
+        :global(.scene-tooltip) {
+          pointer-events: none;
+        }
+      `}</style>
+      <span className="sr-only">{pinRing}</span>
     </div>
   );
 }
