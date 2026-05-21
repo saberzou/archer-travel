@@ -1,7 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { HOT_DESTINATIONS, POPULAR_ROUTES } from "@/lib/hot-destinations";
+import { AIRPORT_COORDS } from "@/lib/airports";
 
 const ReactGlobe = dynamic(() => import("react-globe.gl"), { ssr: false });
 
@@ -19,25 +21,47 @@ export type Route = {
 
 type ThemeMode = "light" | "dark";
 
-const NATURAL_EARTH_50M =
-  "https://unpkg.com/three-globe/example/country-polygons/ne_110m_admin_0_countries.geojson";
-const NATURAL_EARTH_50M_HI =
+const NATURAL_EARTH_HI =
   "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson";
+const NATURAL_EARTH_LO =
+  "https://unpkg.com/three-globe/example/country-polygons/ne_110m_admin_0_countries.geojson";
 
-export default function Globe({
-  routes = [],
-  airports = [],
-}: {
-  routes?: Route[];
-  airports?: Airport[];
-}) {
+type GJ = {
+  geometry?: {
+    type: string;
+    coordinates: number[][][] | number[][][][];
+  };
+};
+
+type LandDot = { lat: number; lng: number };
+
+type HotPoint = {
+  lat: number;
+  lng: number;
+  iata: string;
+  city: string;
+  kind: "hot";
+};
+
+type LandPoint = LandDot & { kind: "land" };
+
+type ArcDatum = {
+  startLat: number;
+  startLng: number;
+  endLat: number;
+  endLng: number;
+  active: boolean;
+};
+
+export default function Globe({ routes = [] }: { routes?: Route[] }) {
   const globeRef = useRef<unknown>(null);
-  const [features, setFeatures] = useState<object[]>([]);
+  const [features, setFeatures] = useState<GJ[]>([]);
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [size, setSize] = useState({ w: 800, h: 800 });
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [activeRoute, setActiveRoute] = useState<Route | null>(null);
 
-  // Track theme switches (so colors update live).
+  // Track theme switches.
   useEffect(() => {
     const read = () =>
       setTheme(
@@ -53,7 +77,7 @@ export default function Globe({
     return () => obs.disconnect();
   }, []);
 
-  // Container size (react-globe.gl wants explicit width/height).
+  // Container size.
   useEffect(() => {
     if (!wrapRef.current) return;
     const ro = new ResizeObserver(([entry]) => {
@@ -64,15 +88,15 @@ export default function Globe({
     return () => ro.disconnect();
   }, []);
 
-  // Fetch Natural Earth — try 50m hi-res first, fall back to 110m.
+  // Fetch Natural Earth.
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
-      for (const url of [NATURAL_EARTH_50M_HI, NATURAL_EARTH_50M]) {
+    (async () => {
+      for (const url of [NATURAL_EARTH_HI, NATURAL_EARTH_LO]) {
         try {
           const r = await fetch(url);
           if (!r.ok) continue;
-          const gj: { features?: object[] } = await r.json();
+          const gj: { features?: GJ[] } = await r.json();
           if (!cancelled && gj.features?.length) {
             setFeatures(gj.features);
             return;
@@ -81,14 +105,84 @@ export default function Globe({
           /* try next */
         }
       }
-    };
-    load();
+    })();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Auto-rotate by default; snap to route midpoint on `archer:focus` event.
+  // Rasterize landmasses to canvas, then sample on a grid to produce land dots.
+  // Single pass, runs once when features arrive.
+  const landDots: LandDot[] = useMemo(() => {
+    if (!features.length || typeof document === "undefined") return [];
+    const W = 1440;
+    const H = 720;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return [];
+    ctx.fillStyle = "#ffffff";
+
+    const project = (lng: number, lat: number): [number, number] => [
+      ((lng + 180) / 360) * W,
+      ((90 - lat) / 180) * H,
+    ];
+
+    const drawRing = (ring: number[][]) => {
+      if (!ring.length) return;
+      const [x0, y0] = project(ring[0][0], ring[0][1]);
+      ctx.moveTo(x0, y0);
+      for (let i = 1; i < ring.length; i++) {
+        const [x, y] = project(ring[i][0], ring[i][1]);
+        ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+    };
+
+    for (const f of features) {
+      const g = f.geometry;
+      if (!g) continue;
+      const polys: number[][][][] =
+        g.type === "Polygon"
+          ? [g.coordinates as number[][][]]
+          : (g.coordinates as number[][][][]);
+      ctx.beginPath();
+      for (const poly of polys) {
+        for (const ring of poly) drawRing(ring);
+      }
+      ctx.fill("evenodd");
+    }
+
+    const img = ctx.getImageData(0, 0, W, H);
+    const dots: LandDot[] = [];
+    const STEP = 1.5; // degrees — controls density
+    for (let lat = -58; lat <= 78; lat += STEP) {
+      for (let lng = -180; lng < 180; lng += STEP) {
+        const x = Math.floor(((lng + 180) / 360) * W);
+        const y = Math.floor(((90 - lat) / 180) * H);
+        const idx = (y * W + x) * 4;
+        if (img.data[idx + 3] > 0) dots.push({ lat, lng });
+      }
+    }
+    return dots;
+  }, [features]);
+
+  // Listen for active-route focus event.
+  useEffect(() => {
+    const onFocus = (e: Event) => {
+      const detail = (e as CustomEvent<{ from?: Airport; to?: Airport }>)
+        .detail;
+      if (detail?.from && detail?.to) {
+        setActiveRoute({ from: detail.from, to: detail.to });
+      }
+    };
+    window.addEventListener("archer:focus", onFocus as EventListener);
+    return () =>
+      window.removeEventListener("archer:focus", onFocus as EventListener);
+  }, []);
+
+  // Auto-rotate + pan-on-focus.
   useEffect(() => {
     const g = globeRef.current as
       | {
@@ -107,78 +201,94 @@ export default function Globe({
     const controls = g.controls?.();
     if (controls) {
       controls.autoRotate = true;
-      controls.autoRotateSpeed = 0.35;
+      controls.autoRotateSpeed = 0.3;
       controls.enableZoom = false;
     }
     g.pointOfView?.({ lat: 20, lng: 0, altitude: 2.4 });
 
-    const onFocus = (e: Event) => {
-      const detail = (e as CustomEvent<{ from?: Airport; to?: Airport }>)
-        .detail;
-      const c = g.controls?.();
-      if (c) c.autoRotate = false;
-      const from = detail?.from;
-      const to = detail?.to;
-      if (from && to) {
-        // Midpoint on great-circle approximation (good enough for framing).
-        const lat = (from.lat + to.lat) / 2;
-        let dLng = to.lng - from.lng;
-        if (dLng > 180) dLng -= 360;
-        if (dLng < -180) dLng += 360;
-        const lng = from.lng + dLng / 2;
-        g.pointOfView?.({ lat, lng, altitude: 2.0 }, 1400);
-      }
-    };
-    window.addEventListener("archer:focus", onFocus as EventListener);
-    return () =>
-      window.removeEventListener("archer:focus", onFocus as EventListener);
-  }, [features]);
+    if (!activeRoute) return;
+    const c = g.controls?.();
+    if (c) c.autoRotate = false;
+    const { from, to } = activeRoute;
+    const lat = (from.lat + to.lat) / 2;
+    let dLng = to.lng - from.lng;
+    if (dLng > 180) dLng -= 360;
+    if (dLng < -180) dLng += 360;
+    const lng = from.lng + dLng / 2;
+    g.pointOfView?.({ lat, lng, altitude: 2.0 }, 1400);
+  }, [activeRoute, landDots]);
 
   const dark = theme === "dark";
   const sphere = dark ? "#0F1015" : "#FFFFFF";
-  const land = dark ? "#2A2C34" : "#E4E6EB";
-  const landStroke = dark ? "#3D4049" : "#C7C9CF";
-  const graticule = dark ? "#1C1D22" : "#EEEFF2";
+  const landColor = dark ? "#3D4049" : "#C7C9CF";
+  const hotColor = "#4A9EFF";
+  const activeColor = "#FF6A00";
+  const popularArc = dark ? "rgba(255,255,255,0.10)" : "rgba(74,158,255,0.18)";
   const atmosphere = "#4A9EFF";
-  const pinRing = dark ? "#000000" : "#FFFFFF";
 
-  // Lat/lng graticule (every 15°) for subtle "futuristic globe" detail.
-  type PathPt = [number, number];
-  const graticulePaths: PathPt[][] = (() => {
-    const paths: PathPt[][] = [];
-    // Parallels (lat lines).
-    for (let lat = -75; lat <= 75; lat += 15) {
-      const ring: PathPt[] = [];
-      for (let lng = -180; lng <= 180; lng += 5) ring.push([lat, lng]);
-      paths.push(ring);
-    }
-    // Meridians (lng lines).
-    for (let lng = -180; lng < 180; lng += 15) {
-      const line: PathPt[] = [];
-      for (let lat = -85; lat <= 85; lat += 5) line.push([lat, lng]);
-      paths.push(line);
-    }
-    return paths;
-  })();
+  // Combined point cloud: land dots (tiny, dim) + hot destinations (bright halo).
+  const allPoints: (LandPoint | HotPoint)[] = useMemo(
+    () => [
+      ...landDots.map((d) => ({ ...d, kind: "land" as const })),
+      ...HOT_DESTINATIONS.map((h) => ({
+        lat: h.lat,
+        lng: h.lng,
+        iata: h.iata,
+        city: h.city,
+        kind: "hot" as const,
+      })),
+    ],
+    [landDots]
+  );
 
-  type ArcD = {
-    startLat: number;
-    startLng: number;
-    endLat: number;
-    endLng: number;
-  };
-  const arcsData: ArcD[] = routes.map((r) => ({
-    startLat: r.from.lat,
-    startLng: r.from.lng,
-    endLat: r.to.lat,
-    endLng: r.to.lng,
-  }));
+  // Arcs: popular routes (faint, ambient) + active route (bright, animated).
+  const allArcs: ArcDatum[] = useMemo(() => {
+    const pop: ArcDatum[] = POPULAR_ROUTES.flatMap((r) => {
+      const a = AIRPORT_COORDS[r.from];
+      const b = AIRPORT_COORDS[r.to];
+      if (!a || !b) return [];
+      return [
+        {
+          startLat: a.lat,
+          startLng: a.lng,
+          endLat: b.lat,
+          endLng: b.lng,
+          active: false,
+        },
+      ];
+    });
+    const active: ArcDatum[] = activeRoute
+      ? [
+          {
+            startLat: activeRoute.from.lat,
+            startLng: activeRoute.from.lng,
+            endLat: activeRoute.to.lat,
+            endLng: activeRoute.to.lng,
+            active: true,
+          },
+        ]
+      : [];
+    // External routes (passed via props) also treated as active.
+    const ext: ArcDatum[] = routes.map((r) => ({
+      startLat: r.from.lat,
+      startLng: r.from.lng,
+      endLat: r.to.lat,
+      endLng: r.to.lng,
+      active: true,
+    }));
+    return [...pop, ...ext, ...active];
+  }, [activeRoute, routes]);
 
-  const pointsData = airports.map((a) => ({
-    lat: a.lat,
-    lng: a.lng,
-    iata: a.iata,
-  }));
+  // Labels: hot destinations always; active endpoints emphasized.
+  const labelsData = useMemo(
+    () =>
+      HOT_DESTINATIONS.map((h) => ({
+        lat: h.lat,
+        lng: h.lng,
+        iata: h.iata,
+      })),
+    []
+  );
 
   return (
     <div ref={wrapRef} className="absolute inset-0">
@@ -189,66 +299,48 @@ export default function Globe({
         backgroundColor="rgba(0,0,0,0)"
         showAtmosphere
         atmosphereColor={atmosphere}
-        atmosphereAltitude={0.12}
+        atmosphereAltitude={0.14}
         globeImageUrl={null}
         showGlobe
-        polygonsData={features}
-        polygonAltitude={0.006}
-        polygonCapColor={() => land}
-        polygonSideColor={() => "rgba(0,0,0,0)"}
-        polygonStrokeColor={() => landStroke}
-        pathsData={graticulePaths}
-        pathPoints={(d: object) => d as PathPt[]}
-        pathPointLat={(p: object) => (p as PathPt)[0]}
-        pathPointLng={(p: object) => (p as PathPt)[1]}
-        pathColor={() => graticule}
-        pathStroke={0.4}
-        pathDashLength={0}
-        pathDashGap={0}
-        pathTransitionDuration={0}
-        arcsData={arcsData}
-        arcColor={() => atmosphere}
-        arcStroke={0.5}
-        arcAltitude={0.28}
-        arcDashLength={0.35}
-        arcDashGap={0.65}
-        arcDashAnimateTime={2200}
-        arcDashInitialGap={() => Math.random()}
-        pointsData={pointsData}
+        // No polygons — continents are drawn as dot matrix below.
+        pointsData={allPoints}
         pointLat={(d: object) => (d as { lat: number }).lat}
         pointLng={(d: object) => (d as { lng: number }).lng}
-        pointAltitude={0.005}
-        pointRadius={0.35}
-        pointColor={() => atmosphere}
-        labelsData={pointsData}
+        pointAltitude={(d: object) =>
+          (d as { kind: string }).kind === "hot" ? 0.015 : 0.003
+        }
+        pointRadius={(d: object) =>
+          (d as { kind: string }).kind === "hot" ? 0.42 : 0.16
+        }
+        pointColor={(d: object) =>
+          (d as { kind: string }).kind === "hot" ? hotColor : landColor
+        }
+        pointResolution={6}
+        arcsData={allArcs}
+        arcColor={(d: object) =>
+          (d as ArcDatum).active ? activeColor : popularArc
+        }
+        arcStroke={(d: object) => ((d as ArcDatum).active ? 0.6 : 0.25)}
+        arcAltitude={(d: object) => ((d as ArcDatum).active ? 0.32 : 0.18)}
+        arcDashLength={(d: object) => ((d as ArcDatum).active ? 0.35 : 1)}
+        arcDashGap={(d: object) => ((d as ArcDatum).active ? 0.65 : 0)}
+        arcDashAnimateTime={(d: object) =>
+          (d as ArcDatum).active ? 2200 : 0
+        }
+        arcDashInitialGap={() => Math.random()}
+        labelsData={labelsData}
         labelLat={(d: object) => (d as { lat: number }).lat}
         labelLng={(d: object) => (d as { lng: number }).lng}
         labelText={(d: object) => (d as { iata: string }).iata}
-        labelSize={0.55}
+        labelSize={0.42}
         labelDotRadius={0}
-        labelAltitude={0.02}
-        labelColor={() => (dark ? "#F5F5F7" : "#0A0A0A")}
+        labelAltitude={0.025}
+        labelColor={() => (dark ? "rgba(245,245,247,0.85)" : "rgba(10,10,10,0.7)")}
         labelResolution={2}
         labelIncludeDot={false}
-        labelTypeFace={undefined}
-        pointLabel={(d: object) =>
-          `<div style="
-            font-family: var(--font-plex-mono), ui-monospace, monospace;
-            font-size:12px; letter-spacing:0.04em; text-transform:uppercase;
-            color:${dark ? "#F5F5F7" : "#0A0A0A"};
-            background:${dark ? "#16171B" : "#FFFFFF"};
-            border:1px solid ${dark ? "#26272C" : "#E5E5EA"};
-            padding:4px 8px; border-radius:6px;">
-            ${(d as { iata: string }).iata}
-          </div>`
-        }
         onGlobeReady={() => {
-          // Apply solid sphere color post-mount by tweaking the globe material.
-          // react-globe.gl exposes the underlying THREE objects via .scene().
           const g = globeRef.current as {
-            scene?: () => {
-              traverse: (cb: (o: unknown) => void) => void;
-            };
+            scene?: () => { traverse: (cb: (o: unknown) => void) => void };
           } | null;
           if (!g?.scene) return;
           g.scene().traverse((obj: unknown) => {
@@ -267,15 +359,11 @@ export default function Globe({
           });
         }}
       />
-      {/* Pin inner-ring fake (CSS dots can't sit on globe; the ring is faked
-          via react-globe.gl's points + a thin atmosphere already provides
-          enough separation against the pale continents). */}
       <style jsx>{`
         :global(.scene-tooltip) {
           pointer-events: none;
         }
       `}</style>
-      <span className="sr-only">{pinRing}</span>
     </div>
   );
 }

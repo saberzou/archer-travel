@@ -3,13 +3,6 @@ import Chat from "@/components/Chat";
 import ThemeToggle from "@/components/ThemeToggle";
 import Archer from "@/components/Archer";
 
-// Demo route until tool output drives it.
-const DEMO_AIRPORTS = [
-  { iata: "PEK", lat: 40.0801, lng: 116.5846 },
-  { iata: "BKK", lat: 13.6811, lng: 100.7475 },
-];
-const DEMO_ROUTES = [{ from: DEMO_AIRPORTS[0], to: DEMO_AIRPORTS[1] }];
-
 export default function Page() {
   return (
     <main className="h-screen overflow-hidden flex flex-col bg-[var(--bg)] text-[var(--text-primary)]">
@@ -41,7 +34,7 @@ export default function Page() {
       {/* Body: desktop = 60/40 split, mobile = stacked */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row">
         <section className="relative md:basis-[60%] md:flex-[0_0_60%] h-[55vh] md:h-auto border-b md:border-b-0 md:border-r border-[var(--border)]">
-          <Globe routes={DEMO_ROUTES} airports={DEMO_AIRPORTS} />
+          <Globe />
         </section>
         <section className="md:basis-[40%] md:flex-[0_0_40%] flex-1 min-h-0 flex flex-col">
           <Chat />
