@@ -1,0 +1,1258 @@
+[
+  {
+    "name": "flight_search",
+    "description": "Search available flights with flexible filtering options. Use data.displayOptions for user-facing flight lists; it is a stable summary built from solution.journeys[].segments[].coreSegmentId and data.segments. Do not parse solutions[].segments directly. Supports up to 5 journey segments for multi-city trips.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "cabinClass": {
+          "type": "string",
+          "enum": [
+            "economy",
+            "premium_economy",
+            "business",
+            "premium_business",
+            "first",
+            "premium_first"
+          ],
+          "default": "economy",
+          "description": "Cabin class: economy, premium_economy, business, premium_business, first, or premium_first. Defaults to economy."
+        },
+        "journeys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "origin": {
+                "type": "string",
+                "pattern": "^[A-Z]{3}$",
+                "description": "Origin city 3-letter IATA code (e.g. BJS for Beijing, SHA for Shanghai)"
+              },
+              "destination": {
+                "type": "string",
+                "pattern": "^[A-Z]{3}$",
+                "description": "Destination city 3-letter IATA code (e.g. BKK for Bangkok, LAX for Los Angeles)"
+              },
+              "departureDate": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "description": "Departure date in YYYY-MM-DD format. IMPORTANT: If the user input contains only month and day, use getTodayDate to determine the year. For today's date, use getTodayDate instead of hardcoding."
+              }
+            },
+            "required": [
+              "origin",
+              "destination",
+              "departureDate"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 5,
+          "description": "Array of journeys (flight segments), at most 5 journeys. Each journey requires origin, destination, and departureDate."
+        },
+        "adult": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1,
+          "description": "Number of adult passengers (age 12+)"
+        },
+        "child": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0,
+          "description": "Number of child passengers (age 2-11)"
+        },
+        "infant": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0,
+          "description": "Number of infant passengers (under age 2)"
+        },
+        "includeAirlines": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "description": "Array of airline codes to include (e.g. ['LX', 'CZ']). If not provided, all airlines are considered."
+        },
+        "excludeAirlines": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "description": "Array of airline codes to exclude (e.g. ['CA', 'UA']). If not provided, no airlines are excluded."
+        },
+        "maxDuration": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Maximum flight duration in minutes (e.g. 150 for 2.5 hours)"
+        },
+        "maxPrice": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Maximum price in CNY"
+        },
+        "maxSegments": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3,
+          "description": "Maximum number of flight segments: 0 for any, 1 for nonstop only, 2 for at most 1 stop, 3 for at most 2 stops"
+        },
+        "mustHaveBag": {
+          "type": "boolean",
+          "default": false,
+          "description": "Require flights that include checked baggage"
+        }
+      },
+      "required": [
+        "journeys"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_pricing",
+    "description": "Search exact flight prices for known flight numbers and route segments. Use after the user provides a flight number, departure/arrival airport, date, and cabin class.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "passengers": {
+          "type": "object",
+          "properties": {
+            "adult": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 1,
+              "description": "Number of adult passengers (age 12+)"
+            },
+            "child": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "description": "Number of child passengers (age 2-11)"
+            },
+            "infant": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "description": "Number of infant passengers (under age 2)"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Passenger counts."
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "departure": {
+                "type": "string",
+                "pattern": "^[A-Z]{3}$",
+                "description": "Departure airport IATA code."
+              },
+              "arrival": {
+                "type": "string",
+                "pattern": "^[A-Z]{3}$",
+                "description": "Arrival airport IATA code."
+              },
+              "departureDate": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "description": "Departure date in YYYY-MM-DD format."
+              },
+              "flightNo": {
+                "type": "string",
+                "description": "Marketing flight number, e.g. CA1234."
+              },
+              "cabinClass": {
+                "type": "string",
+                "enum": [
+                  "economy",
+                  "premium_economy",
+                  "business",
+                  "premium_business",
+                  "first",
+                  "premium_first"
+                ],
+                "description": "Cabin class."
+              },
+              "journeyIndex": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Journey index beginning with 1."
+              }
+            },
+            "required": [
+              "departure",
+              "arrival",
+              "departureDate",
+              "flightNo",
+              "cabinClass"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 10,
+          "description": "Known flight segments to price."
+        }
+      },
+      "required": [
+        "passengers",
+        "segments"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_verify_solution",
+    "description": "Validate real-time price and availability for a flight solution before creating an order. The solutionId comes from flight_search or flight_pricing results.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "solutionId": {
+          "type": "string",
+          "description": "Solution ID returned by flight shopping or pricing."
+        },
+        "passengers": {
+          "type": "object",
+          "properties": {
+            "adult": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 1,
+              "description": "Number of adult passengers (age 12+)"
+            },
+            "child": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "description": "Number of child passengers (age 2-11)"
+            },
+            "infant": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "description": "Number of infant passengers (under age 2)"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Passenger counts for validation."
+        }
+      },
+      "required": [
+        "solutionId",
+        "passengers"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_create_order",
+    "description": "Create a flight origin order after price validation. The orderKey must come from flight_verify_solution. Successful origin/change order details expose data.paymentDeadlineAt normalized from lastActionTime.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderKey": {
+          "type": "string",
+          "description": "Order key returned by price validation."
+        },
+        "externalOrderId": {
+          "type": "string",
+          "description": "Unique buyer-side external order ID."
+        },
+        "passengers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "adult",
+                  "child",
+                  "infant"
+                ],
+                "description": "Passenger type: adult, child, or infant."
+              },
+              "surname": {
+                "type": "string",
+                "description": "Passenger surname / last name in Pinyin or English."
+              },
+              "givenNames": {
+                "type": "string",
+                "description": "Passenger given names / first name in Pinyin or English."
+              },
+              "birthday": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "description": "Date of birth in YYYY-MM-DD format."
+              },
+              "gender": {
+                "type": "string",
+                "enum": [
+                  "male",
+                  "female"
+                ],
+                "description": "Gender."
+              },
+              "nationality": {
+                "type": "string",
+                "description": "Nationality country code."
+              },
+              "travelDocument": {
+                "type": "string",
+                "enum": [
+                  "passport",
+                  "tphm",
+                  "tptw",
+                  "rphmt",
+                  "idcard",
+                  "fpidcard",
+                  "eep",
+                  "ttpmr",
+                  "hhr"
+                ],
+                "description": "Travel document type."
+              },
+              "travelDocumentNumber": {
+                "type": "string",
+                "description": "Travel document number."
+              },
+              "travelDocumentExpireDate": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "description": "Optional document expiry date in YYYY-MM-DD format."
+              },
+              "region": {
+                "type": "string",
+                "description": "Phone region/country code."
+              },
+              "phone": {
+                "type": "string",
+                "description": "Passenger phone number."
+              },
+              "email": {
+                "type": "string",
+                "format": "email",
+                "description": "Optional passenger email."
+              },
+              "airline": {
+                "type": "string",
+                "description": "Frequent flyer airline code."
+              },
+              "cardNo": {
+                "type": "string",
+                "description": "Frequent flyer card number."
+              }
+            },
+            "required": [
+              "type",
+              "surname",
+              "givenNames",
+              "birthday",
+              "gender",
+              "nationality",
+              "travelDocument",
+              "travelDocumentNumber",
+              "phone"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "description": "Passenger information."
+        },
+        "contactRegion": {
+          "type": "string",
+          "description": "Contact phone region/country code."
+        },
+        "contactPhone": {
+          "type": "string",
+          "description": "Contact phone."
+        },
+        "contactEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Contact email."
+        },
+        "contactName": {
+          "type": "string",
+          "description": "Contact name."
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required for write operations. Must be true after the user explicitly confirms the action."
+        },
+        "confirmProduction": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required when using production API for write operations. Must be true after explicit production-environment confirmation."
+        },
+        "confirmExternalOrderId": {
+          "type": "string",
+          "description": "Must match externalOrderId for create-order confirmation."
+        }
+      },
+      "required": [
+        "orderKey",
+        "externalOrderId",
+        "passengers",
+        "contactRegion",
+        "contactPhone"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_order_list",
+    "description": "Query the current agency's flight orders.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderNo": {
+          "type": "string",
+          "description": "Optional Simplifly flight order number."
+        },
+        "airlinePnr": {
+          "type": "string",
+          "description": "Optional airline PNR."
+        },
+        "ticketNo": {
+          "type": "string",
+          "description": "Optional ticket number."
+        },
+        "origin": {
+          "type": "string",
+          "description": "Optional origin city or airport IATA code."
+        },
+        "destination": {
+          "type": "string",
+          "description": "Optional destination city or airport IATA code."
+        },
+        "departureDate": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "Optional departure date in YYYY-MM-DD format."
+        },
+        "status": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional order statuses. Pass multiple values to query multiple statuses."
+        },
+        "orderType": {
+          "type": "string",
+          "enum": [
+            "origin",
+            "change",
+            "refund",
+            "void"
+          ],
+          "description": "Optional order type."
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Page number. Defaults to 1."
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30,
+          "description": "Page size. Defaults to 30."
+        }
+      },
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_pay_order",
+    "description": "Pay a flight order with an explicit payment channel and returnUrl.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Simplifly flight order ID."
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total amount to pay."
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "airwallex",
+            "yeepay-alipay",
+            "yeepay-wechat",
+            "yeepay-credit-card",
+            "yeepay-debit-card"
+          ],
+          "description": "Payment channel."
+        },
+        "returnUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Required payment return URL. Defaults to SIMPLIFLY_PAYMENT_RETURN_URL when omitted."
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "description": "Optional client-generated idempotency key for retry-safe payment attempts."
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required for write operations. Must be true after the user explicitly confirms the action."
+        },
+        "confirmProduction": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required when using production API for write operations. Must be true after explicit production-environment confirmation."
+        },
+        "confirmOrderId": {
+          "type": "string",
+          "description": "Must match orderId for payment confirmation."
+        },
+        "confirmAmount": {
+          "type": "number",
+          "description": "Must match amount for payment confirmation."
+        }
+      },
+      "required": [
+        "orderId",
+        "amount",
+        "channel"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_get_order_invoice_application",
+    "description": "Query invoice application status and whether a flight order can apply for an invoice.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Simplifly flight order ID."
+        }
+      },
+      "required": [
+        "orderId"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_create_order_invoice_application",
+    "description": "Create an invoice application for a flight order. Each order can have at most one invoice application.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Simplifly flight order ID."
+        },
+        "companyName": {
+          "type": "string",
+          "description": "Invoice company name."
+        },
+        "taxNo": {
+          "type": "string",
+          "description": "Taxpayer identification number."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Invoice recipient email."
+        },
+        "phone": {
+          "type": "string",
+          "description": "Contact phone number."
+        },
+        "companyAddress": {
+          "type": "string",
+          "description": "Company address."
+        },
+        "companyPhone": {
+          "type": "string",
+          "description": "Company phone number."
+        },
+        "bankName": {
+          "type": "string",
+          "description": "Bank name."
+        },
+        "bankAccount": {
+          "type": "string",
+          "description": "Bank account."
+        },
+        "remark": {
+          "type": "string",
+          "description": "Invoice application remark."
+        },
+        "invoiceType": {
+          "type": "string",
+          "enum": [
+            "normal"
+          ],
+          "default": "normal",
+          "description": "Invoice type. Currently only normal is supported."
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required for write operations. Must be true after the user explicitly confirms the action."
+        },
+        "confirmProduction": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required when using production API for write operations. Must be true after explicit production-environment confirmation."
+        },
+        "confirmOrderId": {
+          "type": "string",
+          "description": "Must match orderId for invoice application confirmation."
+        }
+      },
+      "required": [
+        "orderId",
+        "companyName",
+        "taxNo",
+        "email",
+        "phone"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_order_detail",
+    "description": "Fetch flight order detail by Simplifly order ID. For origin/change orders, data.paymentDeadlineAt is the normalized payment deadline from lastActionTime.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Simplifly flight order ID."
+        }
+      },
+      "required": [
+        "orderId"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_order_detail_by_external_id",
+    "description": "Fetch flight order detail by buyer-side external order ID. For origin/change orders, data.paymentDeadlineAt is the normalized payment deadline from lastActionTime.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "externalOrderId": {
+          "type": "string",
+          "description": "Buyer-side external order ID."
+        }
+      },
+      "required": [
+        "externalOrderId"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_cancel_order",
+    "description": "Cancel an unpaid or cancelable flight order.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Simplifly flight order ID."
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required for write operations. Must be true after the user explicitly confirms the action."
+        },
+        "confirmProduction": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required when using production API for write operations. Must be true after explicit production-environment confirmation."
+        },
+        "confirmOrderId": {
+          "type": "string",
+          "description": "Must match orderId for cancellation confirmation."
+        }
+      },
+      "required": [
+        "orderId"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_get_airline_alliances",
+    "description": "Get airline alliance data. Pass a specific alliance code such as OW, SA, SK, UF, or VA when known.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Alliance code, such as OW, SA, SK, UF, or VA."
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_get_airline_alliance_by_airline",
+    "description": "Get an airline and its alliance information by airline IATA code.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$",
+          "description": "Airline IATA code, e.g. CA."
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_change_search",
+    "description": "Search available change options for an existing ticket",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Simplifly flight order ID."
+        },
+        "segmentId": {
+          "type": "number",
+          "description": "ID of the flight segment that needs to be changed."
+        },
+        "departureDate": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "New departure date after change, in YYYY-MM-DD format."
+        },
+        "passengers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "Passenger travel document numbers for passengers who need to change this segment."
+        },
+        "cabinClass": {
+          "type": "string",
+          "enum": [
+            "economy",
+            "premium_economy",
+            "business",
+            "premium_business",
+            "first",
+            "premium_first"
+          ],
+          "description": "Preferred cabin class after change. Optional."
+        }
+      },
+      "required": [
+        "orderId",
+        "segmentId",
+        "departureDate",
+        "passengers"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_change_request",
+    "description": "Submit a flight change request",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Simplifly flight order ID."
+        },
+        "changeReason": {
+          "type": "string",
+          "enum": [
+            "0",
+            "1",
+            "2",
+            "3"
+          ],
+          "description": "Change reason: 0 voluntary, 1 flight schedule change, 2 illness/death, 3 other."
+        },
+        "passengerIds": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "description": "Passenger IDs who need to change the flight."
+        },
+        "segmentList": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "number",
+                "description": "ID of the original segment to change."
+              },
+              "newSegment": {
+                "type": "object",
+                "properties": {
+                  "flightNo": {
+                    "type": "string"
+                  },
+                  "departure": {
+                    "type": "string"
+                  },
+                  "arrival": {
+                    "type": "string"
+                  },
+                  "departureDate": {
+                    "type": "string"
+                  },
+                  "departureTime": {
+                    "type": "string"
+                  },
+                  "arrivalDate": {
+                    "type": "string"
+                  },
+                  "arrivalTime": {
+                    "type": "string"
+                  },
+                  "cabinClass": {
+                    "type": "string"
+                  },
+                  "cabinCode": {
+                    "type": "string"
+                  },
+                  "isCodeShare": {
+                    "type": "string"
+                  },
+                  "opFlightNo": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "flightNo",
+                  "departure",
+                  "arrival",
+                  "departureDate",
+                  "departureTime",
+                  "arrivalDate",
+                  "arrivalTime",
+                  "cabinClass",
+                  "cabinCode"
+                ],
+                "additionalProperties": false,
+                "description": "New segment selected from change search API."
+              }
+            },
+            "required": [
+              "id",
+              "newSegment"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "description": "Segments to change. newSegment should come from flight_change_search result."
+        },
+        "contactName": {
+          "type": "string",
+          "description": "Contact person name."
+        },
+        "contactPhone": {
+          "type": "string",
+          "description": "Contact phone number."
+        },
+        "contactRegion": {
+          "type": "string",
+          "description": "Contact phone region/country code."
+        },
+        "contactEmail": {
+          "type": "string",
+          "description": "Contact email."
+        },
+        "reasonDetail": {
+          "type": "string",
+          "description": "Detailed reason for this change request."
+        },
+        "fileList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Supporting file URLs, usually required for involuntary, illness/death, or special change reasons."
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required for write operations. Must be true after the user explicitly confirms the action."
+        },
+        "confirmProduction": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required when using production API for write operations. Must be true after explicit production-environment confirmation."
+        },
+        "confirmOrderId": {
+          "type": "string",
+          "description": "Must match orderId for change request confirmation."
+        }
+      },
+      "required": [
+        "orderId",
+        "changeReason",
+        "passengerIds",
+        "segmentList"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_refund_quote",
+    "description": "Query estimated refund amount and fees",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Simplifly flight order ID."
+        },
+        "passengerIds": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "description": "Passenger IDs who want to refund."
+        },
+        "segmentIds": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "description": "Segment IDs to refund."
+        },
+        "reason": {
+          "type": "integer",
+          "description": "Refund reason: 0 voluntary, 1 flight schedule change, 2 illness/death, 3 other."
+        },
+        "reasonDetail": {
+          "type": "string",
+          "description": "Detailed refund reason."
+        }
+      },
+      "required": [
+        "orderId",
+        "passengerIds",
+        "segmentIds",
+        "reason",
+        "reasonDetail"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_refund_money_search",
+    "description": "Search refundable amount and fees before requesting a refund. This uses the v3 refund-money-search API.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Simplifly flight order ID."
+        },
+        "passengerIds": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "description": "Passenger IDs who want to refund."
+        },
+        "segmentIds": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "description": "Segment IDs to refund."
+        },
+        "reason": {
+          "type": "integer",
+          "description": "Refund reason: 0 voluntary, 1 flight schedule change, 2 illness/death, 3 other."
+        },
+        "reasonDetail": {
+          "type": "string",
+          "description": "Detailed refund reason."
+        }
+      },
+      "required": [
+        "orderId",
+        "passengerIds",
+        "segmentIds",
+        "reason",
+        "reasonDetail"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_refund_request",
+    "description": "Request a refund for a flight ticket",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Simplifly flight order ID."
+        },
+        "passengerIds": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "description": "Passenger IDs who need to refund."
+        },
+        "segmentIds": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "description": "Segment IDs that need to be refunded."
+        },
+        "passengers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Passenger travel document numbers."
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "0",
+            "1",
+            "2",
+            "3"
+          ],
+          "description": "Refund reason: 0 voluntary, 1 flight schedule change, 2 illness/death, 3 other."
+        },
+        "reasonDetail": {
+          "type": "string",
+          "description": "Detailed refund reason."
+        },
+        "fileList": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Supporting file URLs, usually required for involuntary refund, illness/death, or other special refund reasons."
+        },
+        "contactName": {
+          "type": "string",
+          "description": "Contact person name."
+        },
+        "contactPhone": {
+          "type": "string",
+          "description": "Contact phone number."
+        },
+        "contactRegion": {
+          "type": "string",
+          "description": "Contact phone region/country code."
+        },
+        "contactEmail": {
+          "type": "string",
+          "description": "Contact email."
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required for write operations. Must be true after the user explicitly confirms the action."
+        },
+        "confirmProduction": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required when using production API for write operations. Must be true after explicit production-environment confirmation."
+        },
+        "confirmOrderId": {
+          "type": "string",
+          "description": "Must match orderId for refund request confirmation."
+        }
+      },
+      "required": [
+        "orderId",
+        "passengerIds",
+        "segmentIds"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_refund_confirm",
+    "description": "Confirm refund processing after review",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Simplifly flight order ID (refund order ID)."
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required for write operations. Must be true after the user explicitly confirms the action."
+        },
+        "confirmProduction": {
+          "type": "boolean",
+          "default": false,
+          "description": "Required when using production API for write operations. Must be true after explicit production-environment confirmation."
+        },
+        "confirmOrderId": {
+          "type": "string",
+          "description": "Must match orderId for refund confirmation."
+        }
+      },
+      "required": [
+        "orderId"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "flight_download_itinerary",
+    "description": "Download the itinerary document for a flight order by order ID. Returns a PDF file, or ZIP when multiple files are generated.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Simplifly flight order ID."
+        },
+        "lang": {
+          "type": "string",
+          "enum": [
+            "zh-cn",
+            "en"
+          ],
+          "default": "zh-cn",
+          "description": "Itinerary language. Default is zh-cn."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "once"
+          ],
+          "default": "once",
+          "description": "Download type. Default is once."
+        }
+      },
+      "required": [
+        "orderId"
+      ],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  }
+]

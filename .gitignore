@@ -1,0 +1,10 @@
+.env*
+!.env.example
+node_modules
+.next
+.vercel
+*.log
+search_*.json
+tools.json
+travelkit-skill/
+.DS_Store
