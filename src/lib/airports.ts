@@ -1,0 +1,117 @@
+// Minimal airport coords lookup for globe focus.
+// Covers ~80 major international hubs — enough for V1.
+// Extend as needed. Source: openflights public domain coords, rounded.
+
+export type AirportCoord = { lat: number; lng: number };
+
+export const AIRPORT_COORDS: Record<string, AirportCoord> = {
+  // China
+  PEK: { lat: 40.0801, lng: 116.5846 },
+  PKX: { lat: 39.5098, lng: 116.4106 },
+  PVG: { lat: 31.1443, lng: 121.8083 },
+  SHA: { lat: 31.1979, lng: 121.3363 },
+  CAN: { lat: 23.3924, lng: 113.2988 },
+  SZX: { lat: 22.6393, lng: 113.8108 },
+  CTU: { lat: 30.5785, lng: 103.9471 },
+  TFU: { lat: 30.3125, lng: 104.4416 },
+  HGH: { lat: 30.2295, lng: 120.4347 },
+  XIY: { lat: 34.4471, lng: 108.752 },
+  CKG: { lat: 29.7192, lng: 106.6418 },
+  KMG: { lat: 25.1019, lng: 102.9292 },
+  HKG: { lat: 22.308, lng: 113.9185 },
+  MFM: { lat: 22.1496, lng: 113.5916 },
+  TPE: { lat: 25.0777, lng: 121.2328 },
+  // SE Asia
+  BKK: { lat: 13.6811, lng: 100.7475 },
+  DMK: { lat: 13.9126, lng: 100.6068 },
+  SIN: { lat: 1.3592, lng: 103.9894 },
+  KUL: { lat: 2.7456, lng: 101.7099 },
+  CGK: { lat: -6.1256, lng: 106.6559 },
+  MNL: { lat: 14.5086, lng: 121.0194 },
+  SGN: { lat: 10.8188, lng: 106.6519 },
+  HAN: { lat: 21.2187, lng: 105.8042 },
+  RGN: { lat: 16.9073, lng: 96.1332 },
+  PNH: { lat: 11.5466, lng: 104.8442 },
+  // Northeast Asia
+  NRT: { lat: 35.7647, lng: 140.3863 },
+  HND: { lat: 35.5494, lng: 139.7798 },
+  KIX: { lat: 34.4347, lng: 135.244 },
+  ITM: { lat: 34.7855, lng: 135.4382 },
+  NGO: { lat: 34.8584, lng: 136.8054 },
+  ICN: { lat: 37.4602, lng: 126.4407 },
+  GMP: { lat: 37.5583, lng: 126.7906 },
+  // South Asia
+  DEL: { lat: 28.5562, lng: 77.1 },
+  BOM: { lat: 19.0887, lng: 72.8679 },
+  BLR: { lat: 13.1986, lng: 77.7066 },
+  MAA: { lat: 12.99, lng: 80.1693 },
+  HYD: { lat: 17.2403, lng: 78.4294 },
+  CCU: { lat: 22.6547, lng: 88.4467 },
+  CMB: { lat: 7.1808, lng: 79.8841 },
+  KTM: { lat: 27.6966, lng: 85.3591 },
+  // Middle East
+  DXB: { lat: 25.2528, lng: 55.3644 },
+  AUH: { lat: 24.433, lng: 54.6511 },
+  DOH: { lat: 25.2731, lng: 51.6086 },
+  IST: { lat: 41.2753, lng: 28.7519 },
+  TLV: { lat: 32.0114, lng: 34.8867 },
+  // Europe
+  LHR: { lat: 51.47, lng: -0.4543 },
+  LGW: { lat: 51.1537, lng: -0.1821 },
+  CDG: { lat: 49.0097, lng: 2.5479 },
+  ORY: { lat: 48.7233, lng: 2.3794 },
+  AMS: { lat: 52.3105, lng: 4.7683 },
+  FRA: { lat: 50.0379, lng: 8.5622 },
+  MUC: { lat: 48.3538, lng: 11.786 },
+  BER: { lat: 52.3667, lng: 13.5033 },
+  MAD: { lat: 40.4719, lng: -3.5626 },
+  BCN: { lat: 41.2974, lng: 2.0833 },
+  FCO: { lat: 41.8003, lng: 12.2389 },
+  MXP: { lat: 45.6306, lng: 8.7281 },
+  ZRH: { lat: 47.4647, lng: 8.5492 },
+  VIE: { lat: 48.1102, lng: 16.5697 },
+  CPH: { lat: 55.6181, lng: 12.6561 },
+  ARN: { lat: 59.6519, lng: 17.9186 },
+  OSL: { lat: 60.1939, lng: 11.1004 },
+  HEL: { lat: 60.3172, lng: 24.9633 },
+  DUB: { lat: 53.4213, lng: -6.2701 },
+  LIS: { lat: 38.7813, lng: -9.1359 },
+  ATH: { lat: 37.9364, lng: 23.9445 },
+  SVO: { lat: 55.9726, lng: 37.4146 },
+  // North America
+  JFK: { lat: 40.6413, lng: -73.7781 },
+  LGA: { lat: 40.7769, lng: -73.874 },
+  EWR: { lat: 40.6895, lng: -74.1745 },
+  LAX: { lat: 33.9416, lng: -118.4085 },
+  SFO: { lat: 37.6213, lng: -122.379 },
+  SEA: { lat: 47.4502, lng: -122.3088 },
+  ORD: { lat: 41.9742, lng: -87.9073 },
+  ATL: { lat: 33.6407, lng: -84.4277 },
+  DFW: { lat: 32.8998, lng: -97.0403 },
+  MIA: { lat: 25.7959, lng: -80.287 },
+  BOS: { lat: 42.3656, lng: -71.0096 },
+  IAD: { lat: 38.9531, lng: -77.4565 },
+  YYZ: { lat: 43.6777, lng: -79.6248 },
+  YVR: { lat: 49.1947, lng: -123.1839 },
+  YUL: { lat: 45.4706, lng: -73.7408 },
+  MEX: { lat: 19.4361, lng: -99.0719 },
+  // Oceania
+  SYD: { lat: -33.9399, lng: 151.1753 },
+  MEL: { lat: -37.669, lng: 144.8409 },
+  BNE: { lat: -27.3942, lng: 153.1218 },
+  AKL: { lat: -37.0082, lng: 174.785 },
+  // South America
+  GRU: { lat: -23.4356, lng: -46.4731 },
+  EZE: { lat: -34.8222, lng: -58.5358 },
+  // Africa
+  JNB: { lat: -26.1392, lng: 28.246 },
+  CPT: { lat: -33.9648, lng: 18.6017 },
+  CAI: { lat: 30.1219, lng: 31.4056 },
+  NBO: { lat: -1.3192, lng: 36.9278 },
+  ADD: { lat: 8.9779, lng: 38.7993 },
+  LOS: { lat: 6.5774, lng: 3.3211 },
+};
+
+export function lookupAirport(code: string): AirportCoord | null {
+  return AIRPORT_COORDS[code.toUpperCase()] ?? null;
+}

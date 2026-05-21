@@ -5,6 +5,7 @@ import { DefaultChatTransport } from "ai";
 import { useMemo, useRef, useState, useEffect, Fragment } from "react";
 import { ArrowUp } from "lucide-react";
 import Archer, { type ArcherState } from "./Archer";
+import { lookupAirport } from "@/lib/airports";
 
 /* ------------------------------------------------------------------ */
 /*  Tool helpers (preserved from prior scaffold)                       */
@@ -88,6 +89,52 @@ export default function Chat() {
     el.scrollTop = el.scrollHeight;
   }, [messages, status]);
 
+  // Watch for flight_search tool calls — extract IATA pair, focus the globe.
+  const lastFocusedRef = useRef<string>("");
+  useEffect(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role !== "assistant") continue;
+      for (const part of m.parts) {
+        const tp = part as ToolUIPart;
+        const name = getToolName(tp);
+        if (!name || !name.startsWith("flight_search")) continue;
+        const input = (tp.input ?? {}) as Record<string, unknown>;
+        // TravelKit input shape: { from, to, ... } where from/to are IATA strings
+        // or objects with .code. Be defensive.
+        const pick = (v: unknown): string | null => {
+          if (typeof v === "string") return v.toUpperCase();
+          if (v && typeof v === "object") {
+            const o = v as Record<string, unknown>;
+            const k = o.code ?? o.iata ?? o.airport;
+            if (typeof k === "string") return k.toUpperCase();
+          }
+          return null;
+        };
+        const fromCode =
+          pick(input.from) ?? pick(input.origin) ?? pick(input.depCity) ?? pick(input.dep);
+        const toCode =
+          pick(input.to) ?? pick(input.destination) ?? pick(input.arrCity) ?? pick(input.arr);
+        if (!fromCode || !toCode) continue;
+        const key = `${fromCode}>${toCode}`;
+        if (key === lastFocusedRef.current) return;
+        const fromC = lookupAirport(fromCode);
+        const toC = lookupAirport(toCode);
+        if (!fromC || !toC) return;
+        lastFocusedRef.current = key;
+        window.dispatchEvent(
+          new CustomEvent("archer:focus", {
+            detail: {
+              from: { iata: fromCode, ...fromC },
+              to: { iata: toCode, ...toC },
+            },
+          })
+        );
+        return;
+      }
+    }
+  }, [messages]);
+
   const archerState: ArcherState = useMemo(() => {
     if (error) return "error";
     if (status === "submitted" || status === "streaming") return "thinking";
@@ -99,16 +146,8 @@ export default function Chat() {
     if (!input.trim() || status !== "ready") return;
     sendMessage({ text: input });
     setInput("");
-    // Tell the globe to stop idling and frame the active route.
-    // Real routes will come from tool output; for now we cue the demo.
-    window.dispatchEvent(
-      new CustomEvent("archer:focus", {
-        detail: {
-          from: { iata: "PEK", lat: 40.0801, lng: 116.5846 },
-          to: { iata: "BKK", lat: 13.6811, lng: 100.7475 },
-        },
-      })
-    );
+    // Globe follows real tool calls (see flight_search watcher above).
+    // No demo dispatch here.
   };
 
   return (
