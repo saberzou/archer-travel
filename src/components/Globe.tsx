@@ -19,8 +19,10 @@ export type Route = {
 
 type ThemeMode = "light" | "dark";
 
-const NATURAL_EARTH_110M =
+const NATURAL_EARTH_50M =
   "https://unpkg.com/three-globe/example/country-polygons/ne_110m_admin_0_countries.geojson";
+const NATURAL_EARTH_50M_HI =
+  "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson";
 
 export default function Globe({
   routes = [],
@@ -62,17 +64,25 @@ export default function Globe({
     return () => ro.disconnect();
   }, []);
 
-  // Fetch Natural Earth 110m geojson once.
+  // Fetch Natural Earth — try 50m hi-res first, fall back to 110m.
   useEffect(() => {
     let cancelled = false;
-    fetch(NATURAL_EARTH_110M)
-      .then((r) => r.json())
-      .then((gj: { features?: object[] }) => {
-        if (!cancelled) setFeatures(gj.features ?? []);
-      })
-      .catch(() => {
-        /* offline / blocked — globe still renders */
-      });
+    const load = async () => {
+      for (const url of [NATURAL_EARTH_50M_HI, NATURAL_EARTH_50M]) {
+        try {
+          const r = await fetch(url);
+          if (!r.ok) continue;
+          const gj: { features?: object[] } = await r.json();
+          if (!cancelled && gj.features?.length) {
+            setFeatures(gj.features);
+            return;
+          }
+        } catch {
+          /* try next */
+        }
+      }
+    };
+    load();
     return () => {
       cancelled = true;
     };
@@ -106,10 +116,31 @@ export default function Globe({
   }, [features]);
 
   const dark = theme === "dark";
-  const sphere = dark ? "#0B0B0F" : "#FFFFFF";
-  const land = dark ? "#1E1F24" : "#E8E8EC";
+  const sphere = dark ? "#0F1015" : "#FFFFFF";
+  const land = dark ? "#2A2C34" : "#E4E6EB";
+  const landStroke = dark ? "#3D4049" : "#C7C9CF";
+  const graticule = dark ? "#1C1D22" : "#EEEFF2";
   const atmosphere = "#4A9EFF";
   const pinRing = dark ? "#000000" : "#FFFFFF";
+
+  // Lat/lng graticule (every 15°) for subtle "futuristic globe" detail.
+  type PathPt = [number, number];
+  const graticulePaths: PathPt[][] = (() => {
+    const paths: PathPt[][] = [];
+    // Parallels (lat lines).
+    for (let lat = -75; lat <= 75; lat += 15) {
+      const ring: PathPt[] = [];
+      for (let lng = -180; lng <= 180; lng += 5) ring.push([lat, lng]);
+      paths.push(ring);
+    }
+    // Meridians (lng lines).
+    for (let lng = -180; lng < 180; lng += 15) {
+      const line: PathPt[] = [];
+      for (let lat = -85; lat <= 85; lat += 5) line.push([lat, lng]);
+      paths.push(line);
+    }
+    return paths;
+  })();
 
   type ArcD = {
     startLat: number;
@@ -143,10 +174,19 @@ export default function Globe({
         globeImageUrl={null}
         showGlobe
         polygonsData={features}
-        polygonAltitude={0.005}
+        polygonAltitude={0.006}
         polygonCapColor={() => land}
         polygonSideColor={() => "rgba(0,0,0,0)"}
-        polygonStrokeColor={() => "rgba(0,0,0,0)"}
+        polygonStrokeColor={() => landStroke}
+        pathsData={graticulePaths}
+        pathPoints={(d: object) => d as PathPt[]}
+        pathPointLat={(p: object) => (p as PathPt)[0]}
+        pathPointLng={(p: object) => (p as PathPt)[1]}
+        pathColor={() => graticule}
+        pathStroke={0.4}
+        pathDashLength={0}
+        pathDashGap={0}
+        pathTransitionDuration={0}
         arcsData={arcsData}
         arcColor={() => atmosphere}
         arcStroke={0.25}

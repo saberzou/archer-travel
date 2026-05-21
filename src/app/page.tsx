@@ -12,7 +12,7 @@ const DEMO_ROUTES = [{ from: DEMO_AIRPORTS[0], to: DEMO_AIRPORTS[1] }];
 
 export default function Page() {
   return (
-    <main className="min-h-screen flex flex-col bg-[var(--bg)] text-[var(--text-primary)]">
+    <main className="h-screen overflow-hidden flex flex-col bg-[var(--bg)] text-[var(--text-primary)]">
       {/* Top bar */}
       <header className="h-14 px-4 md:px-6 flex items-center justify-between border-b border-[var(--border)] shrink-0">
         <div className="flex items-center gap-3">

@@ -220,6 +220,31 @@ export default function Chat() {
           );
         })}
 
+        {(status === "submitted" ||
+          (status === "streaming" &&
+            !(() => {
+              const last = messages[messages.length - 1];
+              if (!last || last.role !== "assistant") return false;
+              return last.parts.some(
+                (p) => p.type === "text" && (p as { text: string }).text?.length > 0
+              );
+            })())) && (
+          <div className="flex gap-2 justify-start">
+            <div className="w-8 shrink-0">
+              <Archer size={32} state="thinking" />
+            </div>
+            <div
+              className="px-[14px] py-[12px] rounded-[18px] flex items-center gap-1"
+              style={{ background: "var(--bubble-assistant-bg)" }}
+              aria-label="Archer is thinking"
+            >
+              <span className="archer-dot" />
+              <span className="archer-dot" style={{ animationDelay: "0.15s" }} />
+              <span className="archer-dot" style={{ animationDelay: "0.3s" }} />
+            </div>
+          </div>
+        )}
+
         {error && (
           <div
             className="text-[13px] px-3 py-2 rounded-[12px]"

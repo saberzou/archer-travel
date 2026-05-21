@@ -148,3 +148,18 @@ body {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+
+/* Thinking indicator dots */
+.archer-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--text-secondary);
+  display: inline-block;
+  animation: archer-dot-pulse 1.2s ease-in-out infinite;
+  opacity: 0.4;
+}
+@keyframes archer-dot-pulse {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
