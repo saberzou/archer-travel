@@ -44,32 +44,10 @@ export default function Page() {
           mobile  = globe fills the area, chat floats as a bottom sheet
                     over the lower half of the globe */}
       <div className="flex-1 min-h-0 relative md:flex md:flex-row">
-        {/* Globe column.
-            - mobile: full bleed background; Globe wrapper is absolute inset-0
-            - desktop: 68% column, globe is a centered square capped at
-              min(column, viewport-height - header, 720px), floored at 360px. */}
-        <section className="absolute inset-0 md:static md:basis-[68%] md:flex-[0_0_68%] overflow-hidden md:border-r border-[var(--border)] md:flex md:items-center md:justify-center">
+        {/* Globe layer — full bleed on mobile, left column on desktop */}
+        <section className="absolute inset-0 md:static md:basis-[68%] md:flex-[0_0_68%] overflow-hidden md:border-r border-[var(--border)]">
           <DotField dotRadius={2.5} dotColor="rgba(255, 106, 0, 0.35)" />
-          <div className="globe-stage">
-            <Globe />
-          </div>
-          <style>{`
-            .globe-stage {
-              position: absolute;
-              inset: 0;
-            }
-            @media (min-width: 768px) {
-              .globe-stage {
-                position: relative;
-                inset: auto;
-                width: min(100%, calc(100dvh - 4rem), 720px);
-                height: min(100%, calc(100dvh - 4rem), 720px);
-                min-width: 360px;
-                min-height: 360px;
-                aspect-ratio: 1 / 1;
-              }
-            }
-          `}</style>
+          <Globe />
         </section>
         {/* Chat layer — ChatSheet handles both layouts:
               - desktop (md+): static right column
