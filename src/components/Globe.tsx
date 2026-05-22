@@ -57,7 +57,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
   const globeRef = useRef<unknown>(null);
   const [features, setFeatures] = useState<GJ[]>([]);
   const [theme, setTheme] = useState<ThemeMode>("light");
-  const [size, setSize] = useState({ w: 800, h: 800 });
+  const [size, setSize] = useState({ w: 0, h: 0 });
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [activeRoute, setActiveRoute] = useState<Route | null>(null);
 
@@ -82,7 +82,10 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
     if (!wrapRef.current) return;
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
-      setSize({ w: Math.max(320, width), h: Math.max(320, height) });
+      setSize({
+        w: Math.max(0, Math.floor(width)),
+        h: Math.max(0, Math.floor(height)),
+      });
     });
     ro.observe(wrapRef.current);
     return () => ro.disconnect();
@@ -291,11 +294,12 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
   );
 
   return (
-    <div ref={wrapRef} className="absolute inset-0">
-      <ReactGlobe
-        ref={globeRef as never}
-        width={size.w}
-        height={size.h}
+    <div ref={wrapRef} className="absolute inset-0 overflow-hidden">
+      {size.w > 0 && size.h > 0 && (
+        <ReactGlobe
+          ref={globeRef as never}
+          width={size.w}
+          height={size.h}
         backgroundColor="rgba(0,0,0,0)"
         showAtmosphere
         atmosphereColor={atmosphere}
@@ -371,27 +375,28 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
         labelColor={() => (dark ? "rgba(245,245,247,0.85)" : "rgba(10,10,10,0.7)")}
         labelResolution={2}
         labelIncludeDot={false}
-        onGlobeReady={() => {
-          const g = globeRef.current as {
-            scene?: () => { traverse: (cb: (o: unknown) => void) => void };
-          } | null;
-          if (!g?.scene) return;
-          g.scene().traverse((obj: unknown) => {
-            const o = obj as {
-              isMesh?: boolean;
-              geometry?: { type?: string };
-              material?: { color?: { set: (c: string) => void } };
-            };
-            if (
-              o.isMesh &&
-              o.geometry?.type === "SphereGeometry" &&
-              o.material?.color
-            ) {
-              o.material.color.set(sphere);
-            }
-          });
-        }}
-      />
+          onGlobeReady={() => {
+            const g = globeRef.current as {
+              scene?: () => { traverse: (cb: (o: unknown) => void) => void };
+            } | null;
+            if (!g?.scene) return;
+            g.scene().traverse((obj: unknown) => {
+              const o = obj as {
+                isMesh?: boolean;
+                geometry?: { type?: string };
+                material?: { color?: { set: (c: string) => void } };
+              };
+              if (
+                o.isMesh &&
+                o.geometry?.type === "SphereGeometry" &&
+                o.material?.color
+              ) {
+                o.material.color.set(sphere);
+              }
+            });
+          }}
+        />
+      )}
       <style jsx>{`
         :global(.scene-tooltip) {
           pointer-events: none;

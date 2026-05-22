@@ -1,6 +1,7 @@
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
 import { google } from "@ai-sdk/google";
 import { getTravelKitMcp } from "@/lib/mcp";
+import { wrapTools } from "@/lib/tool-compaction";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -50,7 +51,7 @@ export async function POST(req: Request) {
   let mcp: Awaited<ReturnType<typeof getTravelKitMcp>> | undefined;
   try {
     mcp = await getTravelKitMcp();
-    const tools = await mcp.tools();
+    const tools = wrapTools(await mcp.tools());
     const mcpClient = mcp;
 
     const result = streamText({

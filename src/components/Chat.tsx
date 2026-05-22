@@ -6,7 +6,8 @@ import { useMemo, useRef, useState, useEffect, Fragment } from "react";
 import { ArrowUp } from "lucide-react";
 import Archer, { type ArcherState } from "./Archer";
 import { lookupAirport } from "@/lib/airports";
-import FlightResultCard, { parseFlightOutput } from "./FlightResultCard";
+import FlightResultCard from "./FlightResultCard";
+import { parseFlightOutput } from "@/lib/flight-parser";
 
 /* ------------------------------------------------------------------ */
 /*  Tool helpers (preserved from prior scaffold)                       */
@@ -323,7 +324,7 @@ export default function Chat() {
               color: "var(--error)",
             }}
           >
-            Something went sideways. {error.message}
+            Archer hit a snag — try again or rephrase?
           </div>
         )}
       </div>
