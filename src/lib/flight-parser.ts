@@ -60,6 +60,91 @@ function unwrap(output: unknown): unknown {
   return output;
 }
 
+function parseDurationToMinutes(raw: unknown): number {
+  const s = asString(raw);
+  if (!s) return 0;
+  // Matches "03h00m", "3h 0m", "180", "PT3H0M"
+  const hm = s.match(/(\d+)\s*h\s*(\d+)?/i);
+  if (hm) return Number(hm[1]) * 60 + Number(hm[2] ?? 0);
+  const num = Number(s);
+  if (Number.isFinite(num)) return num;
+  return 0;
+}
+
+function parseTravelKitDisplayOptions(payload: unknown): ParsedFlight[] {
+  // TravelKit shape: data.displayOptions[].route[].departure/arrival,
+  // priceTotal, flights[], currency, duration ("03h00m"), transferNum.
+  const options =
+    get<unknown[]>(payload, ["data", "displayOptions"]) ??
+    get<unknown[]>(payload, ["displayOptions"]);
+  if (!Array.isArray(options)) return [];
+
+  return options.flatMap((opt, i) => {
+    const route = get<unknown[]>(opt, ["route"]);
+    if (!Array.isArray(route) || route.length === 0) return [];
+    const first = route[0];
+    const last = route[route.length - 1];
+
+    const origin =
+      asString(get(first, ["departure"])) ??
+      asString(get(first, ["origin"]));
+    const destination =
+      asString(get(last, ["arrival"])) ??
+      asString(get(last, ["destination"]));
+    if (!origin || !destination) return [];
+
+    const depDate = asString(get(first, ["departureDate"])) ?? "";
+    const depTime = asString(get(first, ["departureTime"])) ?? "";
+    const arrDate = asString(get(last, ["arrivalDate"])) ?? "";
+    const arrTime = asString(get(last, ["arrivalTime"])) ?? "";
+
+    let arrDayOffset = 0;
+    if (depDate && arrDate) {
+      const a = new Date(depDate + "T00:00:00Z");
+      const b = new Date(arrDate + "T00:00:00Z");
+      arrDayOffset = Math.round((b.getTime() - a.getTime()) / 86_400_000);
+    }
+
+    const flightNumbers = (get<unknown[]>(opt, ["flights"]) ?? []).filter(
+      (x): x is string => typeof x === "string"
+    );
+
+    const airlineCode = (flightNumbers[0] ?? "").match(/^([A-Z0-9]{2})/i)?.[1] ?? "";
+
+    const priceMinor = asNumber(get(opt, ["priceTotal"])) ?? 0;
+    const baggageSummary = get<unknown[]>(opt, ["baggageSummary"]);
+    const baggageNote = Array.isArray(baggageSummary)
+      ? baggageSummary.filter((s): s is string => typeof s === "string").join("; ") || undefined
+      : undefined;
+
+    const solutionId = asString(get(opt, ["solutionId"])) ?? `opt-${i}`;
+
+    return [
+      {
+        id: solutionId,
+        solutionId,
+        solutionToken: asString(get(opt, ["solutionToken"])) ?? undefined,
+        airlineName: airlineCode || "Airline",
+        airlineCode,
+        flightNumbers,
+        stops:
+          asNumber(get(opt, ["transferNum"])) ??
+          Math.max(route.length - 1, 0),
+        origin,
+        destination,
+        depDate,
+        depTime,
+        arrTime,
+        arrDayOffset,
+        durationMin: parseDurationToMinutes(get(opt, ["duration"])),
+        priceMinor,
+        currency: asString(get(opt, ["currency"])) ?? "CNY",
+        baggageNote,
+      },
+    ];
+  });
+}
+
 function parseCompactOptions(payload: unknown): ParsedFlight[] {
   const options =
     get<unknown[]>(payload, ["data", "displayOptions"]) ??
@@ -262,5 +347,8 @@ function parseDisplayOptions(payload: unknown): ParsedFlight[] {
 }
 
 export function parseFlightOutput(output: unknown): ParsedFlight[] {
-  return parseDisplayOptions(unwrap(output));
+  const payload = unwrap(output);
+  const tk = parseTravelKitDisplayOptions(payload);
+  if (tk.length > 0) return tk;
+  return parseDisplayOptions(payload);
 }

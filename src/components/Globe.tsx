@@ -227,7 +227,6 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
   const hotColor = "#FF6A00";
   const activeColor = "#FF6A00";
   const popularArc = dark ? "rgba(255,170,90,0.40)" : "rgba(255,106,0,0.45)";
-  const atmosphere = "#FF6A00";
 
   // Combined point cloud: land dots (tiny, dim) + hot destinations (bright halo).
   const allPoints: (LandPoint | HotPoint)[] = useMemo(
@@ -301,9 +300,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
           width={size.w}
           height={size.h}
         backgroundColor="rgba(0,0,0,0)"
-        showAtmosphere
-        atmosphereColor={atmosphere}
-        atmosphereAltitude={0.18}
+        showAtmosphere={false}
         globeImageUrl={null}
         showGlobe
         // No polygons — continents are drawn as dot matrix below.
@@ -384,14 +381,22 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
               const o = obj as {
                 isMesh?: boolean;
                 geometry?: { type?: string };
-                material?: { color?: { set: (c: string) => void } };
+                material?: {
+                  color?: { set: (c: string) => void };
+                  transparent?: boolean;
+                  opacity?: number;
+                  needsUpdate?: boolean;
+                };
               };
               if (
                 o.isMesh &&
                 o.geometry?.type === "SphereGeometry" &&
-                o.material?.color
+                o.material
               ) {
-                o.material.color.set(sphere);
+                o.material.color?.set(sphere);
+                o.material.transparent = true;
+                o.material.opacity = dark ? 0.35 : 0.55;
+                o.material.needsUpdate = true;
               }
             });
           }}
