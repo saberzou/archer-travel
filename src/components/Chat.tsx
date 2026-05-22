@@ -100,7 +100,8 @@ export default function Chat() {
       for (const part of m.parts) {
         const tp = part as ToolUIPart;
         const name = getToolName(tp);
-        if (!name || !name.startsWith("flight_search")) continue;
+        if (!name) continue;
+        if (name !== "flight_search" && !name.endsWith("_flight_search")) continue;
         const input = (tp.input ?? {}) as Record<string, unknown>;
         // TravelKit input shape: { from, to, ... } where from/to are IATA strings
         // or objects with .code. Be defensive.
@@ -146,10 +147,26 @@ export default function Chat() {
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || status !== "ready") return;
+    // Eager globe focus: if the user typed an IATA pair (e.g. "HKG to BKK",
+    // "HKG → NRT", "HKG-LAX"), jump the globe immediately so it feels
+    // connected to the message — don't wait for the tool round-trip.
+    const pair = input.toUpperCase().match(/\b([A-Z]{3})\s*(?:->|→|TO|-|–|—)\s*([A-Z]{3})\b/);
+    if (pair) {
+      const [, a, b] = pair;
+      const fromC = lookupAirport(a);
+      const toC = lookupAirport(b);
+      const key = `${a}>${b}`;
+      if (fromC && toC && key !== lastFocusedRef.current) {
+        lastFocusedRef.current = key;
+        window.dispatchEvent(
+          new CustomEvent("archer:focus", {
+            detail: { from: { iata: a, ...fromC }, to: { iata: b, ...toC } },
+          })
+        );
+      }
+    }
     sendMessage({ text: input });
     setInput("");
-    // Globe follows real tool calls (see flight_search watcher above).
-    // No demo dispatch here.
   };
 
   return (

@@ -218,7 +218,12 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
     if (dLng > 180) dLng -= 360;
     if (dLng < -180) dLng += 360;
     const lng = from.lng + dLng / 2;
-    g.pointOfView?.({ lat, lng, altitude: 1.6 }, 1400);
+    // Great-circle distance (degrees) → altitude.
+    // Short hop (HKG→TPE ~6°): tight zoom 0.7. Long-haul (LAX→NRT ~80°): wide 1.8.
+    const dLat = to.lat - from.lat;
+    const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+    const altitude = Math.max(0.7, Math.min(1.9, 0.4 + dist / 50));
+    g.pointOfView?.({ lat, lng, altitude }, 1400);
   }, [activeRoute, landDots]);
 
   const dark = theme === "dark";
