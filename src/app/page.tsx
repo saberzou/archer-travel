@@ -33,7 +33,7 @@ export default function Page() {
 
       {/* Body: desktop = 60/40 split, mobile = stacked */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row">
-        <section className="relative md:basis-[68%] md:flex-[0_0_68%] h-[60vh] md:h-auto border-b md:border-b-0 md:border-r border-[var(--border)]">
+        <section className="relative overflow-hidden md:basis-[68%] md:flex-[0_0_68%] h-[60vh] md:h-auto border-b md:border-b-0 md:border-r border-[var(--border)]">
           <Globe />
         </section>
         <section className="md:basis-[32%] md:flex-[0_0_32%] flex-1 min-h-0 flex flex-col">
