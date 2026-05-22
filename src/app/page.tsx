@@ -1,5 +1,6 @@
 import Globe from "@/components/Globe";
 import Chat from "@/components/Chat";
+import ChatSheet from "@/components/ChatSheet";
 import ThemeToggle from "@/components/ThemeToggle";
 import Archer from "@/components/Archer";
 import DotField from "@/components/DotField";
@@ -48,14 +49,13 @@ export default function Page() {
           <DotField dotRadius={2.5} dotColor="rgba(255, 106, 0, 0.35)" />
           <Globe />
         </section>
-        {/* Chat layer — overlay sheet on mobile (covers bottom ~55%),
-            normal column on desktop */}
-        <section
-          className="absolute left-0 right-0 bottom-0 h-[55%] md:static md:h-auto md:basis-[32%] md:flex-[0_0_32%] flex flex-col bg-[var(--bg)] border-t md:border-t-0 border-[var(--border)] rounded-t-2xl md:rounded-none shadow-[0_-8px_24px_rgba(0,0,0,0.08)] md:shadow-none"
-          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-        >
+        {/* Chat layer — ChatSheet handles both layouts:
+              - desktop (md+): static right column
+              - mobile: draggable bottom sheet with snap points
+            Single mount so useChat state stays unified. */}
+        <ChatSheet>
           <Chat />
-        </section>
+        </ChatSheet>
       </div>
     </main>
   );
