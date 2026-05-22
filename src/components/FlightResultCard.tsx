@@ -145,18 +145,6 @@ export function FlightResultCard({
           >
             {flight.destination}
           </span>
-          <span
-            className="ml-auto tabular-nums"
-            style={{
-              fontFamily: "var(--font-plex-mono), monospace",
-              fontSize: 11,
-              letterSpacing: "0.04em",
-              color: "var(--text-secondary)",
-              textTransform: "uppercase",
-            }}
-          >
-            {stopsLabel}
-          </span>
         </div>
 
         {/* Times row */}
@@ -205,6 +193,18 @@ export function FlightResultCard({
             }}
           >
             · {fmtDuration(flight.durationMin)}
+          </span>
+          <span
+            className="ml-auto tabular-nums"
+            style={{
+              fontFamily: "var(--font-plex-mono), monospace",
+              fontSize: 11,
+              color: "var(--text-secondary)",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+            }}
+          >
+            {stopsLabel}
           </span>
         </div>
 
