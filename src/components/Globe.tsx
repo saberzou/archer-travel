@@ -194,6 +194,9 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
             autoRotate: boolean;
             autoRotateSpeed: number;
             enableZoom: boolean;
+            minDistance?: number;
+            maxDistance?: number;
+            zoomSpeed?: number;
           };
           pointOfView?: (
             pov: { lat?: number; lng?: number; altitude?: number },
@@ -207,28 +210,41 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
     if (controls) {
       controls.autoRotate = true;
       controls.autoRotateSpeed = 0.3;
-      controls.enableZoom = false;
+      controls.enableZoom = true;
+      controls.zoomSpeed = 0.6;
+      const b = distanceBoundsForViewport(size.h);
+      controls.minDistance = b.min;
+      controls.maxDistance = b.max;
     }
-    g.pointOfView?.({ lat: 20, lng: 0, altitude: altitudeForSize(size.w, size.h) }, 1200);
+    g.pointOfView?.(
+      { lat: 20, lng: 0, altitude: altitudeForTargetVh(size.h, 0.82) },
+      1200
+    );
   };
 
-  // Clamp the sphere's APPARENT pixel diameter to a fraction of the VIEWPORT
-  // height. react-globe.gl uses GLOBE_RADIUS=100 and FOV=50°.
-  // Sphere angular size = 2 * asin(100 / camera_distance). Pixel diameter ≈
-  // (angular / FOV_rad) * canvas_height. Solve for altitude given a target px.
-  // Bounds: zoomed-in max = 90% of viewport height, zoomed-out min = 70%.
-  const MIN_VH = 0.70;
-  const MAX_VH = 0.90;
-  const TARGET_VH = 0.82; // ideal share of viewport height
+  // react-globe.gl: GLOBE_RADIUS=100, FOV=50°.
+  // Sphere angular size = 2 * asin(100 / camera_distance).
+  // Pixel diameter ≈ (angular / FOV_rad) * canvas_height.
+  // Solve for camera DISTANCE given a target pixel diameter.
   const FOV_RAD = (50 * Math.PI) / 180;
-  function altitudeForSize(w: number, h: number): number {
-    if (!w || !h) return 1.9;
-    const vh = typeof window !== "undefined" ? window.innerHeight : h;
-    const targetPx = Math.max(vh * MIN_VH, Math.min(vh * MAX_VH, vh * TARGET_VH));
-    const angular = (targetPx / h) * FOV_RAD;
-    const distance = 100 / Math.sin(angular / 2);
-    const altitude = distance / 100 - 1;
-    return Math.max(0.3, Math.min(8, altitude));
+  function distanceForTargetPx(targetPx: number, canvasH: number): number {
+    const angular = (targetPx / canvasH) * FOV_RAD;
+    return 100 / Math.sin(angular / 2);
+  }
+  function altitudeForTargetVh(canvasH: number, vhFrac: number): number {
+    if (!canvasH) return 1.9;
+    const vh = typeof window !== "undefined" ? window.innerHeight : canvasH;
+    const dist = distanceForTargetPx(vh * vhFrac, canvasH);
+    return Math.max(0.05, Math.min(8, dist / 100 - 1));
+  }
+  // Zoom-in CEILING = 90vh diameter → SMALLEST camera distance.
+  // Zoom-out FLOOR  = 70vh diameter → LARGEST camera distance.
+  function distanceBoundsForViewport(canvasH: number): { min: number; max: number } {
+    const vh = typeof window !== "undefined" ? window.innerHeight : canvasH;
+    return {
+      min: distanceForTargetPx(vh * 0.90, canvasH),
+      max: distanceForTargetPx(vh * 0.70, canvasH),
+    };
   }
 
   // Re-fit altitude whenever container size OR viewport height changes.
@@ -244,13 +260,23 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
     if (!initialPoseSet.current || activeRoute) return;
     const g = globeRef.current as
       | {
+          controls?: () => {
+            minDistance?: number;
+            maxDistance?: number;
+          };
           pointOfView?: (
             pov: { altitude?: number },
             ms?: number
           ) => void;
         }
       | null;
-    g?.pointOfView?.({ altitude: altitudeForSize(size.w, size.h) }, 400);
+    const controls = g?.controls?.();
+    if (controls) {
+      const b = distanceBoundsForViewport(size.h);
+      controls.minDistance = b.min;
+      controls.maxDistance = b.max;
+    }
+    g?.pointOfView?.({ altitude: altitudeForTargetVh(size.h, 0.82) }, 400);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size.w, size.h, vh]);
 
