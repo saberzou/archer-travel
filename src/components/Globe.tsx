@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as THREE from "three";
 import { HOT_DESTINATIONS, POPULAR_ROUTES } from "@/lib/hot-destinations";
 import { AIRPORT_COORDS } from "@/lib/airports";
 
@@ -206,7 +205,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
     initialPoseSet.current = true;
     const controls = g.controls?.();
     if (controls) {
-      controls.autoRotate = false;
+      controls.autoRotate = true;
       controls.autoRotateSpeed = 0.3;
       controls.enableZoom = false;
     }
@@ -249,22 +248,6 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
   const hotColor = "#FF6A00";
   const activeColor = "#FF6A00";
   const popularArc = dark ? "rgba(255,170,90,0.40)" : "rgba(255,106,0,0.45)";
-
-  // Globe sphere material. The library's default sphere is opaque black,
-  // which renders as a hard square frame around the visible disc on any
-  // theme. We replace it with an unlit MeshBasicMaterial tinted to the page
-  // background and made semi-transparent so the sphere still occludes the
-  // back-side dots/arcs (giving the globe its 3D feel) while visually
-  // dissolving into the surrounding DotField — no more black square.
-  const globeMaterial = useMemo(() => {
-    const m = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(sphere),
-      transparent: true,
-      opacity: dark ? 0.85 : 0.92,
-      depthWrite: true,
-    });
-    return m;
-  }, [sphere, dark]);
 
   // Combined point cloud: land dots (tiny, dim) + hot destinations (bright halo).
   const allPoints: (LandPoint | HotPoint)[] = useMemo(
@@ -338,7 +321,6 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
           width={size.w}
           height={size.h}
         backgroundColor="rgba(0,0,0,0)"
-        globeMaterial={globeMaterial}
         showAtmosphere={false}
         globeImageUrl={null}
         showGlobe
@@ -413,6 +395,32 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
         labelIncludeDot={false}
           onGlobeReady={() => {
             setupGlobe();
+            const g = globeRef.current as {
+              scene?: () => { traverse: (cb: (o: unknown) => void) => void };
+            } | null;
+            if (!g?.scene) return;
+            g.scene().traverse((obj: unknown) => {
+              const o = obj as {
+                isMesh?: boolean;
+                geometry?: { type?: string };
+                material?: {
+                  color?: { set: (c: string) => void };
+                  transparent?: boolean;
+                  opacity?: number;
+                  needsUpdate?: boolean;
+                };
+              };
+              if (
+                o.isMesh &&
+                o.geometry?.type === "SphereGeometry" &&
+                o.material
+              ) {
+                o.material.color?.set(sphere);
+                o.material.transparent = true;
+                o.material.opacity = dark ? 0.35 : 0.55;
+                o.material.needsUpdate = true;
+              }
+            });
           }}
         />
       )}
