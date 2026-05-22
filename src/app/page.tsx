@@ -45,26 +45,9 @@ export default function Page() {
                     over the lower half of the globe */}
       <div className="flex-1 min-h-0 relative md:flex md:flex-row">
         {/* Globe layer — full bleed on mobile, left column on desktop */}
-        <section className="absolute inset-0 md:static md:basis-[68%] md:flex-[0_0_68%] overflow-hidden md:border-r border-[var(--border)] md:flex md:items-center md:justify-center">
+        <section className="absolute inset-0 md:static md:basis-[68%] md:flex-[0_0_68%] overflow-hidden md:border-r border-[var(--border)]">
           <DotField dotRadius={2.5} dotColor="rgba(255, 106, 0, 0.35)" />
-          <div className="globe-bounds">
-            <Globe />
-          </div>
-          <style>{`
-            .globe-bounds { position: absolute; inset: 0; }
-            @media (min-width: 768px) {
-              .globe-bounds {
-                position: relative;
-                inset: auto;
-                width: 100%;
-                height: 100%;
-                max-width: 720px;
-                max-height: 720px;
-                min-width: 360px;
-                min-height: 360px;
-              }
-            }
-          `}</style>
+          <Globe />
         </section>
         {/* Chat layer — ChatSheet handles both layouts:
               - desktop (md+): static right column
