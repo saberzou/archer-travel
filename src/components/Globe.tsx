@@ -209,9 +209,41 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
       controls.autoRotateSpeed = 0.3;
       controls.enableZoom = false;
     }
-    // Smooth ease from the library's mount altitude (~2.5) down to 1.9.
-    g.pointOfView?.({ lat: 20, lng: 0, altitude: 1.9 }, 1200);
+    g.pointOfView?.({ lat: 20, lng: 0, altitude: altitudeForSize(size.w, size.h) }, 1200);
   };
+
+  // Clamp the sphere's APPARENT pixel diameter between MIN_PX and MAX_PX by
+  // adjusting camera altitude. react-globe.gl uses GLOBE_RADIUS=100 and FOV=50°.
+  // Sphere angular size = 2 * asin(100 / camera_distance). Pixel diameter ≈
+  // (angular / FOV_rad) * canvas_height. Solve for altitude given a target px.
+  const MIN_PX = 360;
+  const MAX_PX = 720;
+  const TARGET_FILL = 0.82; // fraction of min(w,h) we'd ideally fill
+  const FOV_RAD = (50 * Math.PI) / 180;
+  function altitudeForSize(w: number, h: number): number {
+    if (!w || !h) return 1.9;
+    const minSide = Math.min(w, h);
+    const targetPx = Math.max(MIN_PX, Math.min(MAX_PX, minSide * TARGET_FILL));
+    const angular = (targetPx / h) * FOV_RAD;
+    const distance = 100 / Math.sin(angular / 2);
+    const altitude = distance / 100 - 1;
+    return Math.max(0.3, Math.min(4, altitude));
+  }
+
+  // Re-fit altitude whenever container size changes (browser zoom, resize).
+  useEffect(() => {
+    if (!initialPoseSet.current || activeRoute) return;
+    const g = globeRef.current as
+      | {
+          pointOfView?: (
+            pov: { altitude?: number },
+            ms?: number
+          ) => void;
+        }
+      | null;
+    g?.pointOfView?.({ altitude: altitudeForSize(size.w, size.h) }, 400);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size.w, size.h]);
 
   // Pan-on-focus when an active route arrives.
   useEffect(() => {
