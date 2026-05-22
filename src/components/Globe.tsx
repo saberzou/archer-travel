@@ -205,7 +205,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
     initialPoseSet.current = true;
     const controls = g.controls?.();
     if (controls) {
-      controls.autoRotate = true;
+      controls.autoRotate = false;
       controls.autoRotateSpeed = 0.3;
       controls.enableZoom = false;
     }
