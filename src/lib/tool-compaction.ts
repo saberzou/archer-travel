@@ -142,27 +142,31 @@ function isFlightSearchTool(name: string) {
   return name === "flight_search" || name.endsWith("_flight_search");
 }
 
-export function wrapTools<T extends Record<string, ToolLike>>(tools: T): T {
+export function wrapTools<T extends Record<string, unknown>>(tools: T): T {
   return Object.fromEntries(
-    Object.entries(tools).map(([name, tool]) => {
-      if (typeof tool.execute !== "function") return [name, tool];
+    Object.entries(tools).map(([name, rawTool]) => {
+      const tool = rawTool as ToolLike;
+      if (typeof tool.execute !== "function") return [name, rawTool];
 
-      return [
-        name,
-        {
-          ...tool,
-          execute: async (...args: unknown[]) => {
-            try {
-              const result = await tool.execute?.(...args);
-              return isFlightSearchTool(name)
-                ? compactFlightSearchResult(result)
-                : result;
-            } catch (error) {
-              return { error: shortErrorMessage(error) };
-            }
-          },
+      const originalExecute = tool.execute.bind(tool) as (
+        ...args: unknown[]
+      ) => unknown | Promise<unknown>;
+
+      const wrapped = {
+        ...tool,
+        execute: async (...args: unknown[]) => {
+          try {
+            const result = await originalExecute(...args);
+            return isFlightSearchTool(name)
+              ? compactFlightSearchResult(result)
+              : result;
+          } catch (error) {
+            return { error: shortErrorMessage(error) };
+          }
         },
-      ];
+      };
+
+      return [name, wrapped as unknown as T[string]];
     })
   ) as T;
 }

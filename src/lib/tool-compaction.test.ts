@@ -38,16 +38,16 @@ const rawFlightSearch = {
 async function run() {
   const wrapped = wrapTools({
     flight_search: {
-      execute: async () => rawFlightSearch,
+      execute: async (..._args: unknown[]) => rawFlightSearch,
     },
     flight_verify_solution: {
-      execute: async () => {
+      execute: async (..._args: unknown[]) => {
         throw new Error("input token count exceeds 1048576: verbose internals");
       },
     },
   });
 
-  const searchResult = (await wrapped.flight_search.execute({})) as {
+  const searchResult = (await wrapped.flight_search.execute({})) as unknown as {
     data: { displayOptions: Array<{ id: string; solutionToken?: string }> };
   };
   const encoded = JSON.stringify(searchResult);
