@@ -314,7 +314,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
   );
 
   return (
-    <div ref={wrapRef} className="absolute inset-0 overflow-hidden">
+    <div ref={wrapRef} className="absolute inset-0 overflow-hidden -translate-y-[8%] md:translate-y-0">
       {size.w > 0 && size.h > 0 && (
         <ReactGlobe
           ref={globeRef as never}

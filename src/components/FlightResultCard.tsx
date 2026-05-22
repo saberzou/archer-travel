@@ -115,22 +115,22 @@ export function FlightResultCard({
         className="text-left px-4 py-3 flex flex-col gap-2 min-w-0 transition hover:bg-[var(--surface)]"
       >
         {/* IATA pair */}
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-center gap-2">
           <span
             className="tabular-nums"
             style={{
               fontFamily: "var(--font-inter), system-ui, sans-serif",
               fontWeight: 700,
-              fontSize: 32,
-              lineHeight: "34px",
+              fontSize: 26,
+              lineHeight: 1,
               letterSpacing: "-0.03em",
             }}
           >
             {flight.origin}
           </span>
           <ArrowRight
-            className="text-[var(--text-secondary)] shrink-0 self-center"
-            size={16}
+            className="text-[var(--text-secondary)] shrink-0"
+            size={18}
             strokeWidth={2}
           />
           <span
@@ -138,8 +138,8 @@ export function FlightResultCard({
             style={{
               fontFamily: "var(--font-inter), system-ui, sans-serif",
               fontWeight: 700,
-              fontSize: 32,
-              lineHeight: "34px",
+              fontSize: 26,
+              lineHeight: 1,
               letterSpacing: "-0.03em",
             }}
           >
