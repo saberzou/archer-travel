@@ -78,11 +78,42 @@ function renderWithMono(text: string) {
 /* ------------------------------------------------------------------ */
 
 export default function Chat() {
-  const { messages, sendMessage, status, error } = useChat({
+  // Hydrate from sessionStorage so a tab refresh doesn't wipe the conversation.
+  // sessionStorage (not localStorage) so opening a fresh tab starts clean —
+  // matches the "within a session" mental model.
+  const STORAGE_KEY = "archer:chat:v1";
+  const initialMessages = useMemo(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const { messages, sendMessage, status, error, setMessages } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
+    messages: initialMessages,
   });
   const [input, setInput] = useState("");
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+
+  // Persist on every change once the stream is idle to avoid thrash mid-stream.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (status === "streaming" || status === "submitted") return;
+    try {
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    } catch {
+      // quota / serialization — fail silently, refresh just loses history
+    }
+  }, [messages, status]);
+
+  // Suppress unused-var warning for setMessages (kept exported for future "clear chat").
+  void setMessages;
 
   // Auto-scroll on new content.
   useEffect(() => {
