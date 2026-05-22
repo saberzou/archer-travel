@@ -185,8 +185,9 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
       window.removeEventListener("archer:focus", onFocus as EventListener);
   }, []);
 
-  // Auto-rotate + pan-on-focus.
-  useEffect(() => {
+  // Auto-rotate + initial pose. Runs once on globe ready.
+  const initialPoseSet = useRef(false);
+  const setupGlobe = () => {
     const g = globeRef.current as
       | {
           controls?: () => {
@@ -195,21 +196,36 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
             enableZoom: boolean;
           };
           pointOfView?: (
-            pov: { lat: number; lng: number; altitude: number },
+            pov: { lat?: number; lng?: number; altitude?: number },
             ms?: number
           ) => void;
         }
       | null;
-    if (!g) return;
+    if (!g || initialPoseSet.current) return;
+    initialPoseSet.current = true;
     const controls = g.controls?.();
     if (controls) {
       controls.autoRotate = true;
       controls.autoRotateSpeed = 0.3;
       controls.enableZoom = false;
     }
-    g.pointOfView?.({ lat: 20, lng: 0, altitude: 1.9 });
+    // Smooth ease from the library's mount altitude (~2.5) down to 1.9.
+    g.pointOfView?.({ lat: 20, lng: 0, altitude: 1.9 }, 1200);
+  };
 
+  // Pan-on-focus when an active route arrives.
+  useEffect(() => {
     if (!activeRoute) return;
+    const g = globeRef.current as
+      | {
+          controls?: () => { autoRotate: boolean };
+          pointOfView?: (
+            pov: { lat: number; lng: number; altitude: number },
+            ms?: number
+          ) => void;
+        }
+      | null;
+    if (!g) return;
     const c = g.controls?.();
     if (c) c.autoRotate = false;
     const { from, to } = activeRoute;
@@ -224,7 +240,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
     const dist = Math.sqrt(dLat * dLat + dLng * dLng);
     const altitude = Math.max(0.7, Math.min(1.9, 0.4 + dist / 50));
     g.pointOfView?.({ lat, lng, altitude }, 1400);
-  }, [activeRoute, landDots]);
+  }, [activeRoute]);
 
   const dark = theme === "dark";
   const sphere = dark ? "#0F1015" : "#FFFFFF";
@@ -378,6 +394,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
         labelResolution={2}
         labelIncludeDot={false}
           onGlobeReady={() => {
+            setupGlobe();
             const g = globeRef.current as {
               scene?: () => { traverse: (cb: (o: unknown) => void) => void };
             } | null;
