@@ -85,27 +85,26 @@ export function FlightResultCard({
   return (
     <article
       className="
-        relative grid grid-cols-[72px_1fr_92px]
-        w-full max-w-[560px]
+        relative grid grid-cols-[56px_1fr_84px]
+        w-full
         rounded-[12px] overflow-hidden
         bg-[var(--bg)] border border-[var(--border)]
         text-[var(--text-primary)]
       "
       style={{ boxShadow: "var(--shadow-pass, 0 4px 14px rgba(0,0,0,0.08))" }}
     >
-      {/* 1 · Logo slab (orange now, matching brand) */}
+      {/* 1 · Logo slab — airline IATA code */}
       <div className="relative" style={{ background: "var(--brand-orange, #FF6A00)" }}>
         <div
           className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-white whitespace-nowrap"
           style={{
-            transform: "translate(-50%, -50%) rotate(-90deg)",
             fontFamily: "var(--font-inter), system-ui, sans-serif",
-            fontWeight: 700,
-            fontSize: 12,
-            letterSpacing: "0.14em",
+            fontWeight: 800,
+            fontSize: 22,
+            letterSpacing: "0.02em",
           }}
         >
-          ARCHER
+          {flight.airlineCode || "—"}
         </div>
       </div>
 
