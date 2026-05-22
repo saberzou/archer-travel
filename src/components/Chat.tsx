@@ -220,8 +220,7 @@ export default function Chat() {
               <div
                 className={`flex flex-col gap-1 ${
                   isUser ? "items-end" : "items-start"
-                } max-w-[560px] w-fit min-w-0`}
-                style={!isUser ? { width: "min(560px, 75vw)" } : undefined}
+                } w-fit min-w-0 max-w-full`}
               >
                 {m.parts.map((part, i) => {
                   if (part.type === "text") {
