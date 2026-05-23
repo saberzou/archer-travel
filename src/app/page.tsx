@@ -2,6 +2,7 @@ import Globe from "@/components/Globe";
 import Chat from "@/components/Chat";
 import ChatSheet from "@/components/ChatSheet";
 import ThemeToggle from "@/components/ThemeToggle";
+import MemoryButton from "@/components/MemoryButton";
 import Archer from "@/components/Archer";
 import DotField from "@/components/DotField";
 
@@ -36,7 +37,10 @@ export default function Page() {
             travel that flies
           </span>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <MemoryButton />
+          <ThemeToggle />
+        </div>
       </header>
 
       {/* Body:

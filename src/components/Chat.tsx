@@ -1,13 +1,21 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithToolCalls,
+} from "ai";
 import { useMemo, useRef, useState, useEffect, Fragment } from "react";
 import { ArrowUp } from "lucide-react";
 import Archer, { type ArcherState } from "./Archer";
 import { lookupAirport } from "@/lib/airports";
 import FlightResultCard from "./FlightResultCard";
 import { parseFlightOutput } from "@/lib/flight-parser";
+import {
+  applyProfilePatch,
+  getProfile,
+  ProfileSchema,
+} from "@/lib/profile";
 
 /* ------------------------------------------------------------------ */
 /*  Tool helpers (preserved from prior scaffold)                       */
@@ -21,6 +29,7 @@ const TOOL_LABELS: Record<string, string> = {
   flight_download_itinerary: "preparing your itinerary…",
   flight_query_order: "checking your booking…",
   flight_cancel_order: "cancelling…",
+  remember_profile: "noting that down…",
 };
 
 function toolLabel(name: string) {
@@ -94,10 +103,39 @@ export default function Chat() {
     }
   }, []);
 
-  const { messages, sendMessage, status, error, setMessages } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
-    messages: initialMessages,
-  });
+  const { messages, sendMessage, status, error, setMessages, addToolOutput } =
+    useChat({
+      transport: new DefaultChatTransport({
+        api: "/api/chat",
+        body: () => ({ profile: getProfile() }),
+      }),
+      messages: initialMessages,
+      // After Archer's remember_profile tool call resolves on the client,
+      // auto-submit so the model can continue the flow without a manual nudge.
+      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+      async onToolCall({ toolCall }) {
+        // Dynamic (MCP) tools execute server-side; nothing to do here.
+        if (toolCall.dynamic) return;
+
+        if (toolCall.toolName === "remember_profile") {
+          const parsed = ProfileSchema.safeParse(toolCall.input);
+          if (parsed.success) {
+            applyProfilePatch(parsed.data);
+            addToolOutput({
+              tool: "remember_profile",
+              toolCallId: toolCall.toolCallId,
+              output: { saved: true },
+            });
+          } else {
+            addToolOutput({
+              tool: "remember_profile",
+              toolCallId: toolCall.toolCallId,
+              output: { saved: false, error: "invalid patch" },
+            });
+          }
+        }
+      },
+    });
   const [input, setInput] = useState("");
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
