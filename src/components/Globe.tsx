@@ -2,8 +2,92 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
 import { HOT_DESTINATIONS, POPULAR_ROUTES } from "@/lib/hot-destinations";
 import { AIRPORT_COORDS } from "@/lib/airports";
+
+// Great-circle slerp between two lat/lng points.
+function greatCircle(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+  t: number
+): { lat: number; lng: number } {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const toDeg = (r: number) => (r * 180) / Math.PI;
+  const f1 = toRad(lat1),
+    l1 = toRad(lng1),
+    f2 = toRad(lat2),
+    l2 = toRad(lng2);
+  const x1 = Math.cos(f1) * Math.cos(l1);
+  const y1 = Math.cos(f1) * Math.sin(l1);
+  const z1 = Math.sin(f1);
+  const x2 = Math.cos(f2) * Math.cos(l2);
+  const y2 = Math.cos(f2) * Math.sin(l2);
+  const z2 = Math.sin(f2);
+  const dot = Math.max(-1, Math.min(1, x1 * x2 + y1 * y2 + z1 * z2));
+  const w = Math.acos(dot);
+  if (w < 1e-6) return { lat: lat1, lng: lng1 };
+  const sw = Math.sin(w);
+  const a = Math.sin((1 - t) * w) / sw;
+  const b = Math.sin(t * w) / sw;
+  const x = a * x1 + b * x2;
+  const y = a * y1 + b * y2;
+  const z = a * z1 + b * z2;
+  return {
+    lat: toDeg(Math.asin(z)),
+    lng: toDeg(Math.atan2(y, x)),
+  };
+}
+
+// Initial bearing from p1 to p2, in radians (0=N, π/2=E).
+function bearingRad(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const f1 = toRad(lat1),
+    f2 = toRad(lat2);
+  const dl = toRad(lng2 - lng1);
+  const y = Math.sin(dl) * Math.cos(f2);
+  const x =
+    Math.cos(f1) * Math.sin(f2) -
+    Math.sin(f1) * Math.cos(f2) * Math.cos(dl);
+  return Math.atan2(y, x);
+}
+
+// Paper-plane silhouette laid flat in local XY plane (tangent to globe surface).
+// Nose points along +Y (will be rotated around Z by bearing), wings span X.
+// three-globe sets local +Z = normal to surface, so the plane "sits" on its belly.
+function makePaperPlane(color: string): THREE.Group {
+  const group = new THREE.Group();
+  const geom = new THREE.BufferGeometry();
+  const verts = new Float32Array([
+    0, 2.8, 0, // 0: nose (forward)
+    -1.7, -1.6, 0, // 1: left wing tip
+    1.7, -1.6, 0, // 2: right wing tip
+    0, -1.0, 0.35, // 3: tail crease (raised slightly off surface)
+    0, -0.6, 0, // 4: belly center
+  ]);
+  const indices = new Uint16Array([
+    0, 1, 4, // left belly
+    0, 4, 2, // right belly
+    1, 3, 4, // left crease top
+    4, 3, 2, // right crease top
+  ]);
+  geom.setAttribute("position", new THREE.BufferAttribute(verts, 3));
+  geom.setIndex(new THREE.BufferAttribute(indices, 1));
+  geom.computeVertexNormals();
+  const mat = new THREE.MeshBasicMaterial({
+    color,
+    side: THREE.DoubleSide,
+  });
+  group.add(new THREE.Mesh(geom, mat));
+  return group;
+}
 
 const ReactGlobe = dynamic(() => import("react-globe.gl"), { ssr: false });
 
@@ -380,6 +464,82 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
     []
   );
 
+  // Animated plane(s) — one per active arc, loops along great circle in sync
+  // with the 2200ms arcDashAnimateTime. Popular arcs keep the ambient dash flow.
+  const planeRoutes = useMemo(() => {
+    const r: { startLat: number; startLng: number; endLat: number; endLng: number }[] = [];
+    if (activeRoute) {
+      r.push({
+        startLat: activeRoute.from.lat,
+        startLng: activeRoute.from.lng,
+        endLat: activeRoute.to.lat,
+        endLng: activeRoute.to.lng,
+      });
+    }
+    for (const ext of routes) {
+      r.push({
+        startLat: ext.from.lat,
+        startLng: ext.from.lng,
+        endLat: ext.to.lat,
+        endLng: ext.to.lng,
+      });
+    }
+    return r;
+  }, [activeRoute, routes]);
+
+  const [planeTick, setPlaneTick] = useState(0);
+  const rafRef = useRef<number | null>(null);
+  const startTsRef = useRef<number>(0);
+  useEffect(() => {
+    if (planeRoutes.length === 0) return;
+    startTsRef.current = performance.now();
+    const loop = (now: number) => {
+      setPlaneTick(((now - startTsRef.current) % 2200) / 2200);
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [planeRoutes.length]);
+
+  type PlaneDatum = {
+    lat: number;
+    lng: number;
+    alt: number;
+    heading: number;
+    key: string;
+  };
+  const planesData: PlaneDatum[] = useMemo(() => {
+    return planeRoutes.map((r, i) => {
+      const t = planeTick;
+      const p = greatCircle(r.startLat, r.startLng, r.endLat, r.endLng, t);
+      // Look-ahead point for heading (matches arc tangent direction).
+      const tNext = Math.min(0.999, t + 0.01);
+      const pNext = greatCircle(
+        r.startLat,
+        r.startLng,
+        r.endLat,
+        r.endLng,
+        tNext
+      );
+      const heading = bearingRad(p.lat, p.lng, pNext.lat, pNext.lng);
+      // Match arcAltitude=0.34 with a sine bump.
+      const alt = Math.sin(Math.PI * t) * 0.34;
+      return {
+        lat: p.lat,
+        lng: p.lng,
+        alt,
+        heading,
+        key: `${r.startLat},${r.startLng}->${r.endLat},${r.endLng}#${i}`,
+      };
+    });
+  }, [planeRoutes, planeTick]);
+
+  // Cache mesh per active color so we don't rebuild geometry every frame.
+  const planeMeshRef = useRef<THREE.Group | null>(null);
+  const planeMeshColorRef = useRef<string>("");
+
   return (
     <div ref={wrapRef} className="absolute inset-0 overflow-hidden -translate-y-[8%] md:translate-y-0">
       {size.w > 0 && size.h > 0 && (
@@ -460,6 +620,28 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
         labelColor={() => (dark ? "rgba(245,245,247,0.85)" : "rgba(10,10,10,0.7)")}
         labelResolution={2}
         labelIncludeDot={false}
+        objectsData={planesData}
+        objectLat={(d: object) => (d as PlaneDatum).lat}
+        objectLng={(d: object) => (d as PlaneDatum).lng}
+        objectAltitude={(d: object) => (d as PlaneDatum).alt}
+        objectThreeObject={(): THREE.Object3D => {
+          if (
+            !planeMeshRef.current ||
+            planeMeshColorRef.current !== activeColor
+          ) {
+            planeMeshRef.current = makePaperPlane(activeColor);
+            planeMeshColorRef.current = activeColor;
+          }
+          // Clone so each instance has its own transform; share geometry/material via mesh ref.
+          return planeMeshRef.current.clone();
+        }}
+        objectRotation={(d: object) => {
+          // three-globe applies rotation in local frame: x=pitch, y=yaw, z=roll.
+          // Our plane lies in local XY, nose along +Y. Heading 0 = north = +Y already.
+          // Rotate around local Z (surface normal) by -heading (screen-space cw vs math ccw).
+          const h = (d as PlaneDatum).heading;
+          return { x: 0, y: 0, z: -h };
+        }}
           onGlobeReady={() => {
             setupGlobe();
             const g = globeRef.current as {
