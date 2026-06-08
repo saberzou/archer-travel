@@ -91,6 +91,38 @@ function makePaperPlane(color: string, opacity = 1): THREE.Group {
   return group;
 }
 
+// Glowing dot for ambient popular-route planes. Calmer than the paper-plane
+// shape — reads as a soft moving light at small sizes (where the plane's 3D
+// crease collapses into a flat arrow). Additive blending gives a subtle bloom.
+function makeAmbientDot(color: string): THREE.Group {
+  const group = new THREE.Group();
+  const geom = new THREE.SphereGeometry(0.9, 12, 8);
+  const mat = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.85,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  group.add(new THREE.Mesh(geom, mat));
+  return group;
+}
+
+// Ambient-plane subset: 8 globally distributed intercontinental routes.
+// Each entry must also exist in POPULAR_ROUTES (so its faint arc is drawn).
+// The other 16 popular routes still render as static rails but get no plane —
+// keeps the ambient layer calm and lets the eye breathe.
+const POPULAR_ROUTES_AMBIENT: { from: string; to: string }[] = [
+  { from: "HKG", to: "SYD" }, // Asia → Oceania
+  { from: "NRT", to: "LAX" }, // transpac
+  { from: "ICN", to: "JFK" }, // transpac / polar
+  { from: "LHR", to: "JFK" }, // transatlantic
+  { from: "DXB", to: "LHR" }, // Middle East → Europe
+  { from: "DXB", to: "SYD" }, // Middle East → Oceania
+  { from: "GRU", to: "MAD" }, // South America → Europe
+  { from: "PVG", to: "FRA" }, // East Asia → Europe
+];
+
 const ReactGlobe = dynamic(() => import("react-globe.gl"), { ssr: false });
 
 export type Airport = {
@@ -401,6 +433,10 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
   const hotColor = "#FF6A00";
   const activeColor = "#FF6A00";
   const popularArc = dark ? "rgba(255,170,90,0.40)" : "rgba(255,106,0,0.45)";
+  // Warm cream-orange — sits visually between activeColor (#FF6A00) and the
+  // dim popularArc. Distinguishes ambient planes from both active plane and
+  // the static rail they ride on.
+  const ambientPlaneColor = "#FFB370";
 
   // Combined point cloud: land dots (tiny, dim) + hot destinations (bright halo).
   const allPoints: (LandPoint | HotPoint)[] = useMemo(
@@ -490,24 +526,14 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
   }, [activeRoute, routes]);
 
   const [planeTick, setPlaneTick] = useState(0);
+  const [popularPlaneTick, setPopularPlaneTick] = useState(0);
   const rafRef = useRef<number | null>(null);
-  const startTsRef = useRef<number>(0);
-  useEffect(() => {
-    if (planeRoutes.length === 0) return;
-    startTsRef.current = performance.now();
-    const loop = (now: number) => {
-      setPlaneTick(((now - startTsRef.current) % 2200) / 2200);
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-    return () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-    };
-  }, [planeRoutes.length]);
 
-  // Ambient popular-route planes — one per POPULAR_ROUTES arc, looping on the
-  // same 6000ms cadence as the popular arc dash march. Each plane gets a
-  // deterministic per-route phase offset so they don't fly in lockstep.
+  // Ambient popular-route planes — restricted to POPULAR_ROUTES_AMBIENT (8
+  // globally distributed routes, NOT all 24). Each plane loops on the 8000ms
+  // cadence with a deterministic per-route phase offset so they don't fly in
+  // lockstep. The remaining 16 popular arcs render as static rails with no
+  // plane — keeps the ambient layer calm.
   const popularPlaneRoutes = useMemo(() => {
     const out: {
       startLat: number;
@@ -517,7 +543,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
       offset: number;
       key: string;
     }[] = [];
-    for (const r of POPULAR_ROUTES) {
+    for (const r of POPULAR_ROUTES_AMBIENT) {
       const a = AIRPORT_COORDS[r.from];
       const b = AIRPORT_COORDS[r.to];
       if (!a || !b) continue;
@@ -540,22 +566,35 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
     return out;
   }, []);
 
-  const [popularPlaneTick, setPopularPlaneTick] = useState(0);
-  const popularRafRef = useRef<number | null>(null);
-  const popularStartTsRef = useRef<number>(0);
+  // Single rAF loop drives both active (60fps, 2200ms period) and ambient
+  // (throttled to ~30fps, 8000ms period). Previously had two parallel loops
+  // — one for each — which compounded the per-frame React work. Ambient is
+  // small enough (dots at altitude) that 30fps is imperceptible.
   useEffect(() => {
-    if (popularPlaneRoutes.length === 0) return;
-    popularStartTsRef.current = performance.now();
+    const hasActive = planeRoutes.length > 0;
+    const hasAmbient = popularPlaneRoutes.length > 0;
+    if (!hasActive && !hasAmbient) return;
+    const t0 = performance.now();
+    let lastAmbientFrame = -1;
     const loop = (now: number) => {
-      // Normalized time in [0,1) for a 6000ms loop — matches popular arc dash.
-      setPopularPlaneTick(((now - popularStartTsRef.current) % 6000) / 6000);
-      popularRafRef.current = requestAnimationFrame(loop);
+      if (hasActive) {
+        setPlaneTick(((now - t0) % 2200) / 2200);
+      }
+      if (hasAmbient) {
+        // ~30fps gate: 33ms buckets. Skip the React update on intermediate frames.
+        const frame = Math.floor(now / 33);
+        if (frame !== lastAmbientFrame) {
+          lastAmbientFrame = frame;
+          setPopularPlaneTick(((now - t0) % 8000) / 8000);
+        }
+      }
+      rafRef.current = requestAnimationFrame(loop);
     };
-    popularRafRef.current = requestAnimationFrame(loop);
+    rafRef.current = requestAnimationFrame(loop);
     return () => {
-      if (popularRafRef.current != null) cancelAnimationFrame(popularRafRef.current);
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
     };
-  }, [popularPlaneRoutes.length]);
+  }, [planeRoutes.length, popularPlaneRoutes.length]);
 
   type PlaneDatum = {
     lat: number;
@@ -627,7 +666,7 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
   // Cache mesh per active color so we don't rebuild geometry every frame.
   const planeMeshRef = useRef<THREE.Group | null>(null);
   const planeMeshColorRef = useRef<string>("");
-  // Separate cache for ambient (popular) planes — distinct color + scale.
+  // Separate cache for ambient (popular) dots — distinct color, no scaling/rotation.
   const popularPlaneMeshRef = useRef<THREE.Group | null>(null);
   const popularPlaneMeshColorRef = useRef<string>("");
 
@@ -662,15 +701,17 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
         }
         arcStroke={(d: object) => ((d as ArcDatum).active ? 1.0 : 0.45)}
         arcAltitude={(d: object) => ((d as ArcDatum).active ? 0.34 : 0.2)}
-        // Popular routes: gentle marching pulse (long dash + tiny gap so they
-        // still read as continuous, but feel alive). Active: classic chase.
-        arcDashLength={(d: object) => ((d as ArcDatum).active ? 0.35 : 0.9)}
-        arcDashGap={(d: object) => ((d as ArcDatum).active ? 0.65 : 0.1)}
+        // Popular routes: STATIC solid rails (no dash march). The ambient
+        // plane is the only motion on these arcs — reads as "plane travels
+        // its route" instead of two unrelated animations fighting.
+        // Active: classic chase, unchanged.
+        arcDashLength={(d: object) => ((d as ArcDatum).active ? 0.35 : 1)}
+        arcDashGap={(d: object) => ((d as ArcDatum).active ? 0.65 : 0)}
         arcDashAnimateTime={(d: object) =>
-          (d as ArcDatum).active ? 2200 : 6000
+          (d as ArcDatum).active ? 2200 : 0
         }
         arcDashInitialGap={(d: object) =>
-          (d as ArcDatum).active ? 0 : Math.random()
+          (d as ArcDatum).active ? 0 : 0
         }
         arcsTransitionDuration={0}
         pointsMerge={false}
@@ -718,17 +759,16 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
         objectThreeObject={(d: object): THREE.Object3D => {
           const datum = d as PlaneDatum;
           if (datum.kind === "ambient") {
+            // Ambient: soft glowing dot. The sphere geometry's radius (0.9)
+            // already defines its size — no scale override, no heading needed.
             if (
               !popularPlaneMeshRef.current ||
-              popularPlaneMeshColorRef.current !== popularArc
+              popularPlaneMeshColorRef.current !== ambientPlaneColor
             ) {
-              popularPlaneMeshRef.current = makePaperPlane(popularArc, 0.85);
-              popularPlaneMeshColorRef.current = popularArc;
+              popularPlaneMeshRef.current = makeAmbientDot(ambientPlaneColor);
+              popularPlaneMeshColorRef.current = ambientPlaneColor;
             }
-            const inst = popularPlaneMeshRef.current.clone();
-            // ~55% scale — clearly subordinate to the bright active plane.
-            inst.scale.setScalar(0.55);
-            return inst;
+            return popularPlaneMeshRef.current.clone();
           }
           if (
             !planeMeshRef.current ||
@@ -741,11 +781,13 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
           return planeMeshRef.current.clone();
         }}
         objectRotation={(d: object) => {
+          const datum = d as PlaneDatum;
+          // Ambient dots are spheres — heading is meaningless. Skip the calc.
+          if (datum.kind === "ambient") return { x: 0, y: 0, z: 0 };
           // three-globe applies rotation in local frame: x=pitch, y=yaw, z=roll.
           // Our plane lies in local XY, nose along +Y. Heading 0 = north = +Y already.
           // Rotate around local Z (surface normal) by -heading (screen-space cw vs math ccw).
-          const h = (d as PlaneDatum).heading;
-          return { x: 0, y: 0, z: -h };
+          return { x: 0, y: 0, z: -datum.heading };
         }}
           onGlobeReady={() => {
             setupGlobe();
