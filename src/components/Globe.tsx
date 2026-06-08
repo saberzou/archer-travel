@@ -62,7 +62,7 @@ function bearingRad(
 // Paper-plane silhouette laid flat in local XY plane (tangent to globe surface).
 // Nose points along +Y (will be rotated around Z by bearing), wings span X.
 // three-globe sets local +Z = normal to surface, so the plane "sits" on its belly.
-function makePaperPlane(color: string): THREE.Group {
+function makePaperPlane(color: string, opacity = 1): THREE.Group {
   const group = new THREE.Group();
   const geom = new THREE.BufferGeometry();
   const verts = new Float32Array([
@@ -84,6 +84,8 @@ function makePaperPlane(color: string): THREE.Group {
   const mat = new THREE.MeshBasicMaterial({
     color,
     side: THREE.DoubleSide,
+    transparent: opacity < 1,
+    opacity,
   });
   group.add(new THREE.Mesh(geom, mat));
   return group;
@@ -503,14 +505,67 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
     };
   }, [planeRoutes.length]);
 
+  // Ambient popular-route planes — one per POPULAR_ROUTES arc, looping on the
+  // same 6000ms cadence as the popular arc dash march. Each plane gets a
+  // deterministic per-route phase offset so they don't fly in lockstep.
+  const popularPlaneRoutes = useMemo(() => {
+    const out: {
+      startLat: number;
+      startLng: number;
+      endLat: number;
+      endLng: number;
+      offset: number;
+      key: string;
+    }[] = [];
+    for (const r of POPULAR_ROUTES) {
+      const a = AIRPORT_COORDS[r.from];
+      const b = AIRPORT_COORDS[r.to];
+      if (!a || !b) continue;
+      // Deterministic hash from IATA pair → stable phase in [0,1).
+      const seed = `${r.from}->${r.to}`;
+      let h = 0;
+      for (let i = 0; i < seed.length; i++) {
+        h = (h * 31 + seed.charCodeAt(i)) | 0;
+      }
+      const offset = ((h >>> 0) % 1000) / 1000;
+      out.push({
+        startLat: a.lat,
+        startLng: a.lng,
+        endLat: b.lat,
+        endLng: b.lng,
+        offset,
+        key: seed,
+      });
+    }
+    return out;
+  }, []);
+
+  const [popularPlaneTick, setPopularPlaneTick] = useState(0);
+  const popularRafRef = useRef<number | null>(null);
+  const popularStartTsRef = useRef<number>(0);
+  useEffect(() => {
+    if (popularPlaneRoutes.length === 0) return;
+    popularStartTsRef.current = performance.now();
+    const loop = (now: number) => {
+      // Normalized time in [0,1) for a 6000ms loop — matches popular arc dash.
+      setPopularPlaneTick(((now - popularStartTsRef.current) % 6000) / 6000);
+      popularRafRef.current = requestAnimationFrame(loop);
+    };
+    popularRafRef.current = requestAnimationFrame(loop);
+    return () => {
+      if (popularRafRef.current != null) cancelAnimationFrame(popularRafRef.current);
+    };
+  }, [popularPlaneRoutes.length]);
+
   type PlaneDatum = {
     lat: number;
     lng: number;
     alt: number;
     heading: number;
     key: string;
+    kind: "active" | "ambient";
   };
-  const planesData: PlaneDatum[] = useMemo(() => {
+  const activePlanesData: PlaneDatum[] = useMemo(() => {
     return planeRoutes.map((r, i) => {
       const t = planeTick;
       const p = greatCircle(r.startLat, r.startLng, r.endLat, r.endLng, t);
@@ -532,13 +587,49 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
         alt,
         heading,
         key: `${r.startLat},${r.startLng}->${r.endLat},${r.endLng}#${i}`,
+        kind: "active" as const,
       };
     });
   }, [planeRoutes, planeTick]);
 
+  const ambientPlanesData: PlaneDatum[] = useMemo(() => {
+    return popularPlaneRoutes.map((r) => {
+      // Per-route staggered phase: base tick + deterministic offset, mod 1.
+      const t = (popularPlaneTick + r.offset) % 1;
+      const p = greatCircle(r.startLat, r.startLng, r.endLat, r.endLng, t);
+      const tNext = Math.min(0.999, t + 0.01);
+      const pNext = greatCircle(
+        r.startLat,
+        r.startLng,
+        r.endLat,
+        r.endLng,
+        tNext
+      );
+      const heading = bearingRad(p.lat, p.lng, pNext.lat, pNext.lng);
+      // Match popular arcAltitude=0.2 so planes hug their own arcs.
+      const alt = Math.sin(Math.PI * t) * 0.2;
+      return {
+        lat: p.lat,
+        lng: p.lng,
+        alt,
+        heading,
+        key: `popular:${r.key}`,
+        kind: "ambient" as const,
+      };
+    });
+  }, [popularPlaneRoutes, popularPlaneTick]);
+
+  const planesData: PlaneDatum[] = useMemo(
+    () => [...ambientPlanesData, ...activePlanesData],
+    [ambientPlanesData, activePlanesData]
+  );
+
   // Cache mesh per active color so we don't rebuild geometry every frame.
   const planeMeshRef = useRef<THREE.Group | null>(null);
   const planeMeshColorRef = useRef<string>("");
+  // Separate cache for ambient (popular) planes — distinct color + scale.
+  const popularPlaneMeshRef = useRef<THREE.Group | null>(null);
+  const popularPlaneMeshColorRef = useRef<string>("");
 
   return (
     <div ref={wrapRef} className="absolute inset-0 overflow-hidden -translate-y-[8%] md:translate-y-0">
@@ -624,7 +715,21 @@ export default function Globe({ routes = [] }: { routes?: Route[] }) {
         objectLat={(d: object) => (d as PlaneDatum).lat}
         objectLng={(d: object) => (d as PlaneDatum).lng}
         objectAltitude={(d: object) => (d as PlaneDatum).alt}
-        objectThreeObject={(): THREE.Object3D => {
+        objectThreeObject={(d: object): THREE.Object3D => {
+          const datum = d as PlaneDatum;
+          if (datum.kind === "ambient") {
+            if (
+              !popularPlaneMeshRef.current ||
+              popularPlaneMeshColorRef.current !== popularArc
+            ) {
+              popularPlaneMeshRef.current = makePaperPlane(popularArc, 0.85);
+              popularPlaneMeshColorRef.current = popularArc;
+            }
+            const inst = popularPlaneMeshRef.current.clone();
+            // ~55% scale — clearly subordinate to the bright active plane.
+            inst.scale.setScalar(0.55);
+            return inst;
+          }
           if (
             !planeMeshRef.current ||
             planeMeshColorRef.current !== activeColor
